@@ -1,0 +1,8 @@
+{
+  "appId": "com.qingzhang.ledger",
+  "appName": "拾账",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#faf9f5"
+  }
+}
