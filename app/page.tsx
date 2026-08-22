@@ -251,6 +251,8 @@ export default function HomePage() {
         const parsed = JSON.parse(saved) as Partial<LedgerData>;
         const fallback = buildEmpty();
         const realTransactions = (parsed.transactions ?? []).filter((tx) => !tx.id.startsWith('seed-'));
+        // localStorage is client-only, so the persisted ledger is hydrated after mount.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setData({
           ...fallback,
           ...parsed,

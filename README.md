@@ -1,52 +1,106 @@
 # 拾账
 
-一款轻量、简洁、数据仅保存在本机的个人记账 App。
+> 拾起每一笔，理清每一天。
 
-![拾账](public/og.png)
+一款面向日常使用的轻量个人记账应用。它把高频记账路径压缩到“选分类、输金额、完成”，同时提供预算、统计、自定义分类和个性化设置。账本数据默认只保存在当前设备。
 
-## 功能
+[![License: MIT](https://img.shields.io/badge/License-MIT-f2c94c.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.13-222222.svg)](package.json)
+[![Android](https://img.shields.io/badge/Android-Capacitor-222222.svg)](capacitor.config.json)
 
-- 支出与收入快速记账
-- 加减计算键盘、备注与日期
-- 自定义支出和收入分类
-- 分类显示、隐藏与删除
-- 月度预算、收支统计和趋势分析
-- 自定义主题、昵称与本地头像
-- CSV 账单导出
-- Android 返回手势优先关闭记账或设置页面
-- 不包含示例账目，新账本从零开始
+![拾账应用预览](public/og.png)
 
 ## 在线体验
 
-<https://qingzhang-ledger.jliu88000.chatgpt.site>
+访问 [拾账在线版](https://qingzhang-ledger.jliu88000.chatgpt.site)。在线体验地址可能与本仓库最新提交存在短暂差异。
 
-## 本地运行
+## 主要功能
 
-需要 Node.js 22 或更高版本。
+- 极简记账：支出/收入切换、分类、金额、备注和日期集中在一个页面
+- 计算键盘：支持小数、加减运算和快速纠错
+- 自定义分类：可添加、隐藏和删除支出或收入分类
+- 月度概览：展示结余、收入、支出和预算使用进度
+- 统计分析：按分类与月份查看收支构成和趋势
+- 个性设置：支持昵称、本地头像和主题颜色
+- 数据导出：可导出 CSV 账单作为备份
+- 原生返回：Android 返回键或返回手势会先关闭记账/设置页面，再退出应用
+- 干净起步：不预置示例账目，新账本从零开始
+
+## 隐私设计
+
+账目、预算、主题、自定义分类和个人资料保存在浏览器或 App 的本地存储中，不会由本项目主动上传到服务器。卸载应用、清除浏览器数据或清除 App 数据会移除本机账本，请定期导出 CSV 备份。
+
+本项目没有账号系统或云同步能力，不建议把导出的真实账单提交到 Issue、Pull Request 或版本库中。
+
+## 技术栈
+
+- React 19 + TypeScript
+- Next.js 16 / Vinext（Web）
+- Vite（移动端静态资源构建）
+- Capacitor 7（Android 容器与原生返回行为）
+- Lucide React（界面图标）
+
+## 快速开始
+
+环境要求：Node.js 22.13 或更高版本，npm 10 或更高版本。
 
 ```bash
+git clone https://github.com/Lesan-hub/shizhang-ledger.git
+cd shizhang-ledger
 npm install
 npm run dev
 ```
 
-## 构建
+开发服务器启动后，按终端提示访问本地地址。
 
-网页版：
+## 常用命令
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run dev` | 启动 Web 开发服务器 |
+| `npm run lint` | 运行代码检查 |
+| `npm run build` | 构建 Web 版本 |
+| `npm run build:mobile` | 构建 Capacitor 使用的移动端资源 |
+| `npm run android:sync` | 构建移动端资源并同步至 Android 工程 |
+| `npm run android:build` | 构建 Android Debug APK |
+
+## Android 构建
+
+除 Node.js 外，还需要本机已安装兼容的 JDK 与 Android SDK：
 
 ```bash
-npm run build
+npm install
+npm run android:build
 ```
 
-移动端与 Android：
+构建完成后，Debug APK 位于：
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+如需使用 Android Studio 调试：
 
 ```bash
-npm run build:mobile
-npx cap sync android
-cd android
-./gradlew assembleDebug
+npx cap open android
 ```
 
-## 数据说明
+## 项目结构
 
-账目、预算、主题、自定义分类和个人资料均保存在当前设备的本地存储中，不会上传到服务器。卸载应用或清除应用数据会删除本机账本，建议定期导出 CSV 备份。
+```text
+app/                  Web 页面与全局样式
+mobile/               移动端入口与图标资源
+public/               Web 静态资源与项目预览图
+android/              Capacitor Android 工程
+www/                  已生成的移动端 Web 资源
+capacitor.config.json Capacitor 应用配置
+vite.mobile.config.ts 移动端构建配置
+```
 
+## 参与项目
+
+欢迎提交问题和改进建议。开始贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；发现安全或隐私问题时，请遵循 [SECURITY.md](SECURITY.md)，不要直接公开敏感细节。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。

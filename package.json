@@ -1,7 +1,24 @@
 {
-  "name": "sites-project",
+  "name": "shizhang-ledger",
   "version": "0.1.0",
+  "description": "拾账：简洁、快速、数据保存在本机的个人记账应用",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lesan-hub/shizhang-ledger.git"
+  },
+  "homepage": "https://github.com/Lesan-hub/shizhang-ledger#readme",
+  "bugs": {
+    "url": "https://github.com/Lesan-hub/shizhang-ledger/issues"
+  },
+  "keywords": [
+    "ledger",
+    "expense-tracker",
+    "personal-finance",
+    "react",
+    "capacitor"
+  ],
   "engines": {
     "node": ">=22.13.0"
   },
@@ -27,7 +44,6 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "4.20260515.1",
-    "@openai/sites-vite-plugin": "^0.1.0 || ^0.2.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
