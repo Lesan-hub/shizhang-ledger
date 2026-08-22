@@ -10,6 +10,45 @@
 
 ![拾账应用预览](public/og.png)
 
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="public/screenshots/home.png" alt="拾账首页概览" width="300" />
+      <br />
+      <strong>首页概览</strong>
+      <br />
+      <sub>本月结余、预算进度和最近记录一眼看清</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="public/screenshots/quick-entry.png" alt="拾账快速记账" width="300" />
+      <br />
+      <strong>快速记账</strong>
+      <br />
+      <sub>选分类、输金额、完成，常用操作集中在一页</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="public/screenshots/statistics.png" alt="拾账收支统计" width="300" />
+      <br />
+      <strong>收支统计</strong>
+      <br />
+      <sub>分类占比和每日趋势帮助理解资金去向</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="public/screenshots/profile.png" alt="拾账个人设置" width="300" />
+      <br />
+      <strong>我的账本</strong>
+      <br />
+      <sub>预算、分类、主题和数据管理统一整理</sub>
+    </td>
+  </tr>
+</table>
+
+> 截图中的账目与昵称仅用于界面演示；首次安装后默认从空账本开始。
+
 ## 在线体验
 
 访问 [拾账在线版](https://qingzhang-ledger.jliu88000.chatgpt.site)。在线体验地址可能与本仓库最新提交存在短暂差异。
