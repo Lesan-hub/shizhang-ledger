@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-f2c94c.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.13-222222.svg)](package.json)
 [![Android](https://img.shields.io/badge/Android-Capacitor-222222.svg)](capacitor.config.json)
+[![Download APK](https://img.shields.io/badge/下载-Android_APK-f2c94c.svg)](https://github.com/Lesan-hub/shizhang-ledger/releases/latest)
 
 ![拾账应用预览](public/og.png)
 
@@ -19,7 +20,7 @@
       <br />
       <strong>首页概览</strong>
       <br />
-      <sub>本月结余、预算进度和最近记录一眼看清</sub>
+      <sub>今日花费优先呈现，本月收支和预算作为补充</sub>
     </td>
     <td align="center" width="50%">
       <img src="public/screenshots/quick-entry.png" alt="拾账快速记账" width="300" />
@@ -56,6 +57,7 @@
 ## 主要功能
 
 - 极简记账：支出/收入切换、分类、金额、备注和日期集中在一个页面
+- 今日优先：首页突出当天花费，一点即可查看今日支出明细
 - 计算键盘：支持小数、加减运算和快速纠错
 - 自定义分类：可添加、隐藏和删除支出或收入分类
 - 月度概览：展示结余、收入、支出和预算使用进度

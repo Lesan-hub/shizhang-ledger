@@ -239,6 +239,7 @@ export default function HomePage() {
   const [note, setNote] = useState('');
   const [txDate, setTxDate] = useState(relativeDate(0));
   const [recordFilter, setRecordFilter] = useState<'all' | TxType>('all');
+  const [recordDateFilter, setRecordDateFilter] = useState<'all' | 'today'>('all');
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState('');
   const [settingsPanel, setSettingsPanel] = useState<SettingsPanel>(null);
@@ -326,7 +327,8 @@ export default function HomePage() {
     { expense: 0, income: 0 },
   ), [monthTransactions]);
   const budgetPercent = Math.min(100, data.budget > 0 ? Math.round((totals.expense / data.budget) * 100) : 0);
-  const todaySpent = data.transactions.filter((transaction) => transaction.date === relativeDate(0) && transaction.type === 'expense').reduce((sum, item) => sum + item.amount, 0);
+  const todayExpenses = data.transactions.filter((transaction) => transaction.date === relativeDate(0) && transaction.type === 'expense');
+  const todaySpent = todayExpenses.reduce((sum, item) => sum + item.amount, 0);
   const expenseCategoryOptions = useMemo(() => [...expenseCategories, ...data.customCategories.filter((item) => item.type === 'expense').map(customCategoryMeta)], [data.customCategories]);
   const incomeCategoryOptions = useMemo(() => [...incomeCategories, ...data.customCategories.filter((item) => item.type === 'income').map(customCategoryMeta)], [data.customCategories]);
   const enabledExpense = expenseCategoryOptions.filter((item) => !data.hiddenCategories.includes(`expense:${item.name}`));
@@ -365,10 +367,11 @@ export default function HomePage() {
     const normalized = query.trim().toLowerCase();
     return monthTransactions.filter((tx) => {
       const matchesType = recordFilter === 'all' || tx.type === recordFilter;
+      const matchesDate = recordDateFilter === 'all' || tx.date === relativeDate(0);
       const matchesQuery = !normalized || tx.note.toLowerCase().includes(normalized) || tx.category.toLowerCase().includes(normalized);
-      return matchesType && matchesQuery;
+      return matchesType && matchesDate && matchesQuery;
     });
-  }, [monthTransactions, query, recordFilter]);
+  }, [monthTransactions, query, recordDateFilter, recordFilter]);
 
   const accent = data.theme === 'custom' ? data.customAccent : themeOptions.find((item) => item.id === data.theme)?.accent ?? themeOptions[0].accent;
   const themeStyle = {
@@ -384,6 +387,20 @@ export default function HomePage() {
     setAmount(nextAmount);
     setBaseAmount(null);
     setOperator(null);
+  }
+
+  function openAllRecords() {
+    setRecordDateFilter('all');
+    setTab('records');
+  }
+
+  function openTodayRecords() {
+    const now = new Date();
+    setMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+    setRecordFilter('expense');
+    setRecordDateFilter('today');
+    setQuery('');
+    setTab('records');
   }
 
   function pushLayer(layer: 'entry' | 'settings') {
@@ -632,18 +649,22 @@ export default function HomePage() {
                 <div className="brand-lockup"><span className="brand-mark"><img src="/app-icon.png" alt="" /></span><div><b>拾账</b><span>把每一笔，拾进账本</span></div></div>
                 <button className="avatar" onClick={() => setTab('profile')} aria-label="打开个人设置">{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</button>
               </header>
-              <div className="home-greeting"><p>{month.getMonth() + 1} 月账本</p><h1>{todaySpent ? `今天花了 ${formatMoney(todaySpent, todaySpent % 1 ? 2 : 0)}` : '今天，从第一笔开始'}</h1></div>
-              <div className="month-row"><MonthControl value={month} onChange={setMonth} /></div>
-              <section className="balance-card" aria-label="本月收支概览">
-                <div className="balance-label"><span>本月结余</span><WalletCards size={19} /></div>
-                <strong>{formatMoney(totals.income - totals.expense)}</strong>
-                <div className="balance-meta"><span><ArrowDownLeft size={15} />收入 <b>{formatMoney(totals.income)}</b></span><span><ArrowUpRight size={15} />支出 <b>{formatMoney(totals.expense)}</b></span></div>
+              <div className="home-period"><div><p className="eyebrow">LEDGER</p><h1>{month.getMonth() + 1} 月账本</h1></div><MonthControl value={month} onChange={setMonth} /></div>
+              <button className="today-card" onClick={() => todayExpenses.length ? openTodayRecords() : openNew()} aria-label={todayExpenses.length ? `今日花费 ${formatMoney(todaySpent)}，查看今日明细` : '今日还没有支出，记下第一笔'}>
+                <span className="today-heading"><span><small>TODAY</small><b>今日花费</b></span><CalendarDays size={21} /></span>
+                <strong>{formatMoney(todaySpent)}</strong>
+                <span className="today-footer"><span>{todayExpenses.length ? `今日 ${todayExpenses.length} 笔支出` : '今天还没有支出'}</span><b>{todayExpenses.length ? '查看今日明细' : '记下今天第一笔'}<ChevronRight size={16} /></b></span>
+              </button>
+              <section className="month-summary" aria-label="本月收支概览">
+                <div><span>本月结余</span><strong>{formatMoney(totals.income - totals.expense)}</strong></div>
+                <div><span><ArrowDownLeft size={13} />收入</span><strong>{formatMoney(totals.income)}</strong></div>
+                <div><span><ArrowUpRight size={13} />支出</span><strong>{formatMoney(totals.expense)}</strong></div>
               </section>
               <button className={`budget-strip ${data.budget ? '' : 'is-empty'}`} onClick={() => openSettings('budget')}>
                 {data.budget ? <><span className="budget-line"><span>{month.getMonth() + 1} 月预算</span><b>已用 {budgetPercent}%</b></span><span className="progress"><i style={{ width: `${budgetPercent}%` }} /></span><small>{data.budget - totals.expense >= 0 ? `还可以花 ${formatMoney(data.budget - totals.expense)}` : `已超出 ${formatMoney(totals.expense - data.budget)}`}</small></> : <><span><Settings2 size={18} />设置月预算</span><small>给本月支出定一个上限</small><ChevronRight size={18} /></>}
               </button>
               <section className="recent-section">
-                <div className="section-heading"><div><p className="eyebrow">RECENT</p><h2>最近记录</h2></div>{monthTransactions.length > 0 && <button onClick={() => setTab('records')}>全部记录</button>}</div>
+                <div className="section-heading"><div><p className="eyebrow">RECENT</p><h2>最近记录</h2></div>{monthTransactions.length > 0 && <button onClick={openAllRecords}>全部记录</button>}</div>
                 <div className="transaction-list home-list">{monthTransactions.length ? monthTransactions.slice(0, 6).map(renderTransaction) : emptyState('账本还是空的', true)}</div>
               </section>
             </div>
@@ -663,9 +684,9 @@ export default function HomePage() {
 
           {tab === 'records' && (
             <div className="page">
-              <header className="page-header"><div><p className="eyebrow">LEDGER</p><h1>全部明细</h1></div><MonthControl value={month} onChange={setMonth} /></header>
+              <header className="page-header"><div><p className="eyebrow">LEDGER</p><h1>{recordDateFilter === 'today' ? '今日明细' : '全部明细'}</h1></div><MonthControl value={month} onChange={(next) => { setMonth(next); setRecordDateFilter('all'); }} /></header>
               <label className="search-box"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索分类或备注" aria-label="搜索账单" />{query && <button onClick={() => setQuery('')} aria-label="清空搜索"><X size={16} /></button>}</label>
-              <div className="filter-row"><ListFilter size={17} />{([['all', '全部'], ['expense', '支出'], ['income', '收入']] as const).map(([value, label]) => <button className={recordFilter === value ? 'active' : ''} key={value} onClick={() => setRecordFilter(value)}>{label}</button>)}<span>{visibleRecords.length} 笔</span></div>
+              <div className="filter-row"><ListFilter size={17} />{recordDateFilter === 'today' && <button className="active" onClick={() => setRecordDateFilter('all')}>今日 ×</button>}{([['all', '全部'], ['expense', '支出'], ['income', '收入']] as const).map(([value, label]) => <button className={recordFilter === value ? 'active' : ''} key={value} onClick={() => setRecordFilter(value)}>{label}</button>)}<span>{visibleRecords.length} 笔</span></div>
               <div className="records-total"><span>筛选合计</span><b>支出 {formatMoney(visibleRecords.filter((tx) => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0))}</b></div>
               <section className="transaction-list records-list">{visibleRecords.length ? visibleRecords.map(renderTransaction) : emptyState('没有匹配的记录')}</section>
             </div>
@@ -695,7 +716,7 @@ export default function HomePage() {
           <button className={tab === 'home' ? 'active' : ''} onClick={() => setTab('home')}><Home /><span>首页</span></button>
           <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}><BarChart3 /><span>统计</span></button>
           <button className="add-button" onClick={() => openNew()} aria-label="记一笔"><Plus /></button>
-          <button className={tab === 'records' ? 'active' : ''} onClick={() => setTab('records')}><ReceiptText /><span>明细</span></button>
+          <button className={tab === 'records' ? 'active' : ''} onClick={openAllRecords}><ReceiptText /><span>明细</span></button>
           <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}><CircleUserRound /><span>我的</span></button>
         </nav>
 
@@ -723,7 +744,7 @@ export default function HomePage() {
               {settingsPanel === 'theme' && <div className="sheet-content"><p className="sheet-tip">选择一种喜欢的主色，界面会立即更新。</p><div className="theme-list">{themeOptions.map((item) => <button className={data.theme === item.id ? 'active' : ''} key={item.id} onClick={() => setData((current) => ({ ...current, theme: item.id }))}><i style={{ background: item.accent }} /><span>{item.name}</span>{data.theme === item.id && <Check size={18} />}</button>)}<label className={data.theme === 'custom' ? 'active custom-color' : 'custom-color'} onClick={() => setData((current) => ({ ...current, theme: 'custom' }))}><i style={{ background: data.customAccent }}><Palette size={15} /></i><span>自定义颜色</span>{data.theme === 'custom' && <Check size={18} />}<input type="color" value={data.customAccent} onChange={(event) => setData((current) => ({ ...current, theme: 'custom', customAccent: event.target.value }))} /></label></div></div>}
               {settingsPanel === 'budget' && <div className="sheet-content"><p className="sheet-tip">预算从 0 开始，你可以随时修改；设为 0 即关闭提醒。</p><label className="budget-editor"><span>¥</span><input autoFocus inputMode="decimal" value={data.budget || ''} onChange={(event) => setData((current) => ({ ...current, budget: Math.max(0, Number(event.target.value)) }))} placeholder="0" /></label><div className="budget-presets">{[1000, 3000, 5000, 8000].map((value) => <button key={value} onClick={() => setData((current) => ({ ...current, budget: value }))}>{formatMoney(value, 0)}</button>)}</div></div>}
               {settingsPanel === 'categories' && <div className="sheet-content category-settings"><p className="sheet-tip">关闭不常用的分类，记账页会更精简。你也可以添加自己的支出或收入分类，已有账目不会受影响。</p>{([['expense', '支出分类', expenseCategoryOptions], ['income', '收入分类', incomeCategoryOptions]] as const).map(([type, label, items]) => <div className="category-setting-group" key={type}><h3>{label}</h3><div className="category-setting-list">{items.map((item) => { const Icon = item.icon; const enabled = !data.hiddenCategories.includes(`${type}:${item.name}`); return <div className={`category-setting-item ${enabled ? 'enabled' : ''}`} key={`${type}:${item.name}`}><button className="category-toggle" onClick={() => toggleCategory(type, item.name)}><span style={{ background: item.soft, color: item.color }}><Icon size={18} /></span><b>{item.name}</b><i>{enabled ? '显示' : '隐藏'}</i></button>{item.customId && <button className="category-remove" onClick={() => deleteCustomCategory(item, type)} aria-label={`删除${item.name}`}><Trash2 size={14} /></button>}</div>; })}</div><form className="category-add" onSubmit={(event) => addCustomCategory(event, type)}><input maxLength={8} value={newCategoryNames[type]} onChange={(event) => setNewCategoryNames((current) => ({ ...current, [type]: event.target.value }))} placeholder={type === 'expense' ? '例如：宠物、订阅' : '例如：副业、利息'} /><button type="submit"><Plus size={16} />添加</button></form></div>)}</div>}
-              {settingsPanel === 'about' && <div className="sheet-content about-card"><img src="/app-icon.png" alt="拾账图标" /><h3>拾账</h3><p>把每一笔，拾进自己的账本。没有示例账目，没有复杂流程，你的账本由你自己开始。</p><span><ShieldCheck size={17} />所有数据仅存于本机</span><small>版本 1.0</small></div>}
+              {settingsPanel === 'about' && <div className="sheet-content about-card"><img src="/app-icon.png" alt="拾账图标" /><h3>拾账</h3><p>把每一笔，拾进自己的账本。没有示例账目，没有复杂流程，你的账本由你自己开始。</p><span><ShieldCheck size={17} />所有数据仅存于本机</span><small>版本 1.1</small></div>}
             </section>
           </div>
         )}
