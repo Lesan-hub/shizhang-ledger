@@ -9,6 +9,17 @@
 [![Android](https://img.shields.io/badge/Android-Capacitor-222222.svg)](capacitor.config.json)
 [![Download APK](https://img.shields.io/badge/下载-Android_APK-f2c94c.svg)](https://github.com/Lesan-hub/shizhang-ledger/releases/latest)
 
+## 两个独立版本
+
+本仓库目前并行维护两个版本，二者不会互相覆盖：
+
+| 版本 | 开发分支 | 适合人群 | 在线体验 |
+| --- | --- | --- | --- |
+| **拾账基础版（当前默认）** | [`main`](https://github.com/Lesan-hub/shizhang-ledger/tree/main) | 想快速记一笔、查看今日花费的用户 | [打开基础版](https://qingzhang-ledger.jliu88000.chatgpt.site) |
+| **拾账 · 账户版（另一版本）** | [`edition/accounts`](https://github.com/Lesan-hub/shizhang-ledger/tree/edition/accounts) | 有微信、支付宝、银行卡、信用卡、分期或固定账单的职场用户 | [打开账户版](https://shizhang-accounts.jliu88000.chatgpt.site) |
+
+账户版使用独立的本地存储和 Android 包名，可以与基础版同时安装、分别保存数据。账户版当前处于 `0.1` 预览阶段，基础版仍会在 `main` 分支持续维护。
+
 ![拾账应用预览](public/og.png)
 
 ## 界面预览
