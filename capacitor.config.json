@@ -1,6 +1,6 @@
 {
-  "appId": "com.qingzhang.ledger",
-  "appName": "拾账",
+  "appId": "com.shizhang.accounts",
+  "appName": "拾账账户版",
   "webDir": "www",
   "android": {
     "backgroundColor": "#faf9f5"

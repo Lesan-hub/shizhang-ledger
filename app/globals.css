@@ -16,7 +16,7 @@
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
 body { margin: 0; background: #eeeae0; color: var(--ink); font-family: var(--font-geist-sans), "PingFang SC", "Noto Sans SC", sans-serif; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { color: inherit; }
 
 .app-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 12% 4%, #fff8d9 0, transparent 32%), radial-gradient(circle at 88% 94%, #e5eee9 0, transparent 35%), #eeeae0; }
@@ -78,6 +78,69 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.04em; }
 .budget-strip.is-empty small { grid-column: 1; }
 .budget-strip.is-empty > svg { grid-column: 2; grid-row: 1 / 3; color: var(--faint); }
 
+.money-radar { margin: 14px 0 26px; padding: 17px; border: 1px solid var(--line); border-radius: 23px; background: rgba(255,255,255,.82); box-shadow: 0 12px 28px rgba(52,49,40,.06); backdrop-filter: blur(12px); }
+.radar-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
+.radar-heading h2 { font-size: 15px; }
+.radar-heading button, .header-action { display: flex; align-items: center; gap: 2px; padding: 6px 0; border: 0; background: transparent; color: var(--accent-strong); font-size: 9px; font-weight: 760; cursor: pointer; }
+.radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.radar-grid > button { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; }
+.radar-icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 11px; background: var(--accent-soft); color: var(--accent-strong); }
+.radar-grid > button > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.radar-grid small { color: var(--muted); font-size: 8px; }
+.radar-grid strong { font-family: var(--mono); font-size: 11px; }
+.account-onboarding { display: grid; width: 100%; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; margin-top: 9px; padding: 12px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, #d8d4ca); border-radius: 16px; background: var(--accent-soft); color: var(--accent-strong); text-align: left; }
+.account-onboarding > span { display: flex; align-items: center; gap: 7px; }
+.account-onboarding b { font-size: 10px; }
+.account-onboarding small { grid-column: 1; padding-left: 25px; color: var(--muted); font-size: 8px; }
+.account-onboarding > svg { grid-column: 2; grid-row: 1 / 3; }
+.radar-note { display: flex; justify-content: space-between; gap: 12px; margin-top: 9px; padding: 9px 3px 0; color: var(--muted); font-size: 8px; }
+.page-home .budget-strip { margin-top: 0; }
+
+.account-overview-card { display: flex; flex-direction: column; gap: 17px; margin-bottom: 14px; padding: 21px; border-radius: 24px; background: linear-gradient(145deg, #292924, #44433c); color: #fff; box-shadow: 0 16px 34px rgba(37,36,31,.17); }
+.account-overview-card > span { display: flex; flex-direction: column; gap: 5px; }
+.account-overview-card small { color: rgba(255,255,255,.58); font-size: 9px; }
+.account-overview-card strong { font-family: var(--mono); font-size: 29px; }
+.account-overview-card > div { display: flex; gap: 22px; color: rgba(255,255,255,.72); font-size: 9px; }
+.account-empty { display: flex; min-height: 330px; flex-direction: column; align-items: center; justify-content: center; padding: 34px 27px; border: 1px solid var(--line); border-radius: 24px; background: #fff; text-align: center; }
+.account-empty > span { display: grid; width: 58px; height: 58px; margin-bottom: 16px; place-items: center; border-radius: 20px; background: var(--accent-soft); color: var(--accent-strong); }
+.account-empty h2 { margin-bottom: 8px; font-size: 16px; }
+.account-empty p { max-width: 285px; margin-bottom: 20px; color: var(--muted); font-size: 9px; line-height: 1.7; }
+.account-empty button { display: flex; align-items: center; gap: 5px; padding: 11px 16px; border: 0; border-radius: 13px; background: var(--accent); color: var(--accent-text); font-size: 10px; font-weight: 760; }
+.account-list-section, .account-tools { margin-top: 22px; }
+.account-list, .bill-list, .installment-list { display: flex; flex-direction: column; gap: 9px; }
+.account-item { overflow: hidden; padding: 14px; border: 1px solid var(--line); border-radius: 20px; background: #fff; }
+.account-item.credit { background: linear-gradient(145deg, #fff, color-mix(in srgb, var(--accent-soft) 55%, white)); }
+.account-main { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.account-type-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 14px; background: var(--accent-soft); color: var(--accent-strong); }
+.account-type-icon svg { width: 19px; }
+.account-main > span:nth-child(2) { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.account-main b { font-size: 11px; }
+.account-main small, .credit-meta { color: var(--muted); font-size: 8px; }
+.account-main > strong { font-family: var(--mono); font-size: 10px; text-align: right; }
+.credit-meta { display: flex; justify-content: space-between; gap: 10px; margin: 11px 0 0 50px; padding-top: 9px; border-top: 1px solid var(--line); }
+.account-actions { display: flex; justify-content: flex-end; gap: 5px; margin-top: 9px; }
+.account-actions button { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 0; border-radius: 9px; background: var(--accent-soft); color: var(--accent-strong); font-size: 8px; font-weight: 700; }
+.account-actions .quiet-danger { background: #f8eeed; color: var(--danger); }
+.bill-list > div, .installment-list > div { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; align-items: center; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.bill-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 12px; background: var(--accent-soft); color: var(--accent-strong); }
+.bill-list > div > span:nth-child(2), .installment-list > div > span:nth-child(2) { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.bill-list b, .installment-list b { font-size: 10px; }
+.bill-list small, .installment-list small { color: var(--muted); font-size: 8px; }
+.bill-list strong, .installment-list strong { font-family: var(--mono); font-size: 9px; }
+.bill-list > div > button { display: grid; padding: 4px; border: 0; background: transparent; color: var(--faint); }
+.tool-empty { display: flex; width: 100%; align-items: center; gap: 10px; padding: 14px; border: 1px dashed #d9d5ca; border-radius: 17px; background: rgba(255,255,255,.7); color: var(--accent-strong); text-align: left; }
+.tool-empty > span { display: flex; flex: 1; flex-direction: column; gap: 3px; }
+.tool-empty b { color: var(--ink); font-size: 9px; }
+.tool-empty small { color: var(--muted); font-size: 8px; }
+.account-breakdown { display: flex; flex-direction: column; gap: 7px; }
+.account-breakdown button { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 15px; align-items: center; gap: 9px; padding: 8px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
+.account-breakdown button:last-child { border-bottom: 0; }
+.account-breakdown button > span:nth-child(2) { display: flex; flex-direction: column; gap: 3px; }
+.account-breakdown b { font-size: 10px; }
+.account-breakdown small { color: var(--muted); font-size: 8px; }
+.account-breakdown strong { font-family: var(--mono); font-size: 9px; }
+.account-breakdown > button > svg { color: var(--faint); }
+
 .section-heading, .panel-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .section-heading > button { padding: 5px 0; border: 0; background: transparent; color: var(--accent-strong); font-size: 10px; font-weight: 780; cursor: pointer; }
 .transaction-list { overflow: hidden; border: 1px solid var(--line); border-radius: 21px; background: var(--card); }
@@ -90,6 +153,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.04em; }
 .transaction-copy small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .transaction > strong { font-family: var(--mono); font-size: 11px; letter-spacing: -.03em; }
 .transaction > strong.positive { color: #377761; }
+.status-chip { display: inline-flex; margin-left: 5px; padding: 2px 5px; border-radius: 5px; background: var(--accent-soft); color: var(--accent-strong); font-size: 7px; font-style: normal; font-weight: 760; vertical-align: 2px; }
 
 .empty-state { display: flex; min-height: 205px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 25px; color: var(--faint); text-align: center; }
 .empty-mark { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 5px; border-radius: 18px; background: var(--accent-soft); color: var(--accent-strong); }
@@ -134,6 +198,8 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.04em; }
 .filter-row button { padding: 7px 11px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--muted); font-size: 9px; font-weight: 650; }
 .filter-row button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
 .filter-row > span { margin-left: auto; font-size: 9px; }
+.account-filter { display: flex; height: 38px; align-items: center; gap: 7px; margin-bottom: 11px; padding: 0 11px; border: 1px solid var(--line); border-radius: 13px; background: #fff; color: var(--muted); }
+.account-filter select { min-width: 0; flex: 1; border: 0; outline: 0; appearance: none; background: transparent; color: var(--ink); font-size: 9px; }
 .records-total { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 12px 14px; border-radius: 15px; background: var(--accent-soft); color: var(--accent-strong); font-size: 9px; }
 .records-total b { font-family: var(--mono); }
 
@@ -194,6 +260,17 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.04em; }
 .entry-number strong { max-width: 72%; overflow: hidden; font-family: var(--mono); font-size: 27px; letter-spacing: -.06em; text-overflow: ellipsis; white-space: nowrap; }
 .note-field { display: flex; height: 40px; align-items: center; gap: 8px; padding: 0 12px; border-radius: 12px; background: #f5f4f1; color: var(--muted); }
 .note-field input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 10px; }
+.entry-fields { display: grid; grid-template-columns: 1fr 1.12fr; gap: 7px; }
+.entry-account { display: flex; height: 40px; min-width: 0; align-items: center; gap: 6px; padding: 0 9px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-strong); }
+.entry-account select { min-width: 0; flex: 1; border: 0; outline: 0; appearance: none; background: transparent; color: var(--ink); font-size: 9px; }
+.entry-options { display: flex; gap: 6px; margin-top: 7px; }
+.entry-options button { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--muted); font-size: 8px; }
+.entry-options button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+.installment-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; padding: 8px; border-radius: 11px; background: #f5f4f1; }
+.installment-editor label { display: flex; align-items: center; gap: 6px; }
+.installment-editor label span { color: var(--muted); font-size: 7px; }
+.installment-editor select, .installment-editor input { width: 70px; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 8px; font-weight: 700; }
+.installment-editor small { grid-column: 1 / -1; color: var(--muted); font-size: 7px; }
 .calculator { display: grid; flex: 0 0 auto; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 58px); border-top: 1px solid var(--line); background: #fff; }
 .calculator > button, .date-key { display: flex; align-items: center; justify-content: center; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #fff; font-family: var(--mono); font-size: 20px; cursor: pointer; }
 .calculator > *:nth-child(4n) { border-right: 0; }
@@ -224,6 +301,20 @@ h2 { margin: 0; font-size: 19px; letter-spacing: -.04em; }
 .form-field { display: block; margin-bottom: 11px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
 .form-field > span { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; color: var(--muted); font-size: 9px; font-weight: 700; }
 .form-field input { width: 100%; border: 0; outline: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
+.form-field select { width: 100%; border: 0; outline: 0; appearance: none; background: transparent; color: var(--ink); font-size: 12px; font-weight: 700; }
+.choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 11px; }
+.choice-grid button { display: flex; height: 47px; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--muted); font-size: 9px; font-weight: 700; }
+.choice-grid button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); box-shadow: inset 0 0 0 1px var(--accent); }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 11px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.switch-row > span { display: flex; flex-direction: column; gap: 3px; }
+.switch-row b { font-size: 10px; }
+.switch-row small { color: var(--muted); font-size: 8px; }
+.switch-row input { width: 34px; height: 19px; accent-color: var(--accent-strong); }
+.dual-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 11px; }
+.dual-fields label { display: flex; flex-direction: column; gap: 7px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 15px; background: #fff; }
+.dual-fields span { color: var(--muted); font-size: 8px; font-weight: 700; }
+.dual-fields input, .dual-fields select { width: 100%; border: 0; outline: 0; appearance: none; background: transparent; color: var(--ink); font-size: 12px; font-weight: 700; }
+.primary-form-action { width: 100%; height: 46px; margin-top: 3px; border: 0; border-radius: 15px; background: var(--accent); color: var(--accent-text); font-size: 11px; font-weight: 800; }
 .theme-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .theme-list > button, .theme-list > label { position: relative; display: flex; height: 54px; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; cursor: pointer; }
 .theme-list .active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

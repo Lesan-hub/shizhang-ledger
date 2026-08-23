@@ -1,4 +1,4 @@
-package com.qingzhang.ledger;
+package com.shizhang.accounts;
 
 import com.getcapacitor.BridgeActivity;
 

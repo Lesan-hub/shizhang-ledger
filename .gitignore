@@ -36,5 +36,5 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
-/.openai/
+/android/.android-user/
 /.learnings/
