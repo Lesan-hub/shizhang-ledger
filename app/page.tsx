@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties, FormEvent } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import type { LucideIcon } from 'lucide-react';
@@ -63,7 +63,7 @@ import {
 type TxType = 'expense' | 'income';
 type Tab = 'home' | 'accounts' | 'stats' | 'records' | 'profile';
 type ThemeId = 'sunny' | 'forest' | 'ink' | 'ocean' | 'sunset' | 'plum' | 'custom';
-type SettingsPanel = 'profile' | 'theme' | 'budget' | 'categories' | 'account' | 'bill' | 'repayment' | 'about' | null;
+type SettingsPanel = 'profile' | 'theme' | 'budget' | 'categories' | 'settings' | 'account' | 'bill' | 'repayment' | 'about' | null;
 type AccountType = 'payment' | 'bank' | 'cash' | 'credit';
 type ReimbursementStatus = 'none' | 'pending' | 'reimbursed';
 
@@ -305,10 +305,13 @@ function MonthControl({ value, onChange }: { value: Date; onChange: (date: Date)
 }
 
 export default function HomePage() {
+  const pageScrollRef = useRef<HTMLDivElement>(null);
+  const recordsOriginScroll = useRef(0);
   const [data, setData] = useState<LedgerData>(() => buildEmpty());
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [trendWindow, setTrendWindow] = useState(0);
   const [entryOpen, setEntryOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftType, setDraftType] = useState<TxType>('expense');
@@ -324,8 +327,10 @@ export default function HomePage() {
   const [installmentPeriods, setInstallmentPeriods] = useState(3);
   const [installmentFee, setInstallmentFee] = useState('');
   const [recordFilter, setRecordFilter] = useState<'all' | TxType>('all');
-  const [recordDateFilter, setRecordDateFilter] = useState<'all' | 'today'>('all');
+  const [recordDateFilter, setRecordDateFilter] = useState<'all' | string>('all');
+  const [recordCategoryFilter, setRecordCategoryFilter] = useState<{ name: string; type: TxType } | null>(null);
   const [recordAccountFilter, setRecordAccountFilter] = useState('all');
+  const [recordsOrigin, setRecordsOrigin] = useState<Exclude<Tab, 'records'> | null>(null);
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState('');
   const [settingsPanel, setSettingsPanel] = useState<SettingsPanel>(null);
@@ -384,12 +389,23 @@ export default function HomePage() {
 
   useEffect(() => {
     const closeTopLayer = () => {
-      setEntryOpen(false);
-      setSettingsPanel(null);
+      if (entryOpen) {
+        setEntryOpen(false);
+        return;
+      }
+      if (settingsPanel) {
+        setSettingsPanel(null);
+        return;
+      }
+      if (recordsOrigin) {
+        setTab(recordsOrigin);
+        setRecordsOrigin(null);
+        window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: recordsOriginScroll.current }));
+      }
     };
     window.addEventListener('popstate', closeTopLayer);
     return () => window.removeEventListener('popstate', closeTopLayer);
-  }, []);
+  }, [entryOpen, recordsOrigin, settingsPanel]);
 
   useEffect(() => {
     let disposed = false;
@@ -403,6 +419,15 @@ export default function HomePage() {
         dismissSettings();
         return;
       }
+      if (recordsOrigin) {
+        if (window.history.state?.ledgerLayer === 'records-detail') window.history.back();
+        else {
+          setTab(recordsOrigin);
+          setRecordsOrigin(null);
+          window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: recordsOriginScroll.current }));
+        }
+        return;
+      }
       if (canGoBack) window.history.back();
       else void CapacitorApp.exitApp();
     }).then((handle) => {
@@ -413,7 +438,7 @@ export default function HomePage() {
       disposed = true;
       if (removeListener) void removeListener();
     };
-  }, [entryOpen, settingsPanel]);
+  }, [entryOpen, recordsOrigin, settingsPanel]);
 
   const monthTransactions = useMemo(
     () => data.transactions.filter((transaction) => transaction.date.startsWith(monthKey(month))).sort((a, b) => b.createdAt - a.createdAt),
@@ -486,26 +511,45 @@ export default function HomePage() {
   const dailyTrend = useMemo(() => {
     const days: { key: string; label: string; amount: number }[] = [];
     const now = new Date();
-    const end = monthKey(month) === monthKey(now) ? new Date(now) : new Date(month.getFullYear(), month.getMonth() + 1, 0);
-    for (let offset = 6; offset >= 0; offset -= 1) {
-      const day = new Date(end);
-      day.setDate(end.getDate() - offset);
+    const monthStart = new Date(month.getFullYear(), month.getMonth(), 1, 12);
+    const latestDay = monthKey(month) === monthKey(now) ? new Date(now) : new Date(month.getFullYear(), month.getMonth() + 1, 0, 12);
+    latestDay.setHours(12, 0, 0, 0);
+    const end = new Date(latestDay);
+    end.setDate(latestDay.getDate() - trendWindow * 7);
+    const start = new Date(end);
+    start.setDate(end.getDate() - 6);
+    if (start < monthStart) start.setTime(monthStart.getTime());
+    for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
       const key = dateKey(day);
       days.push({ key, label: `${day.getMonth() + 1}/${day.getDate()}`, amount: data.transactions.filter((tx) => tx.type === 'expense' && tx.date === key).reduce((sum, tx) => sum + tx.amount, 0) });
     }
     return days;
-  }, [data.transactions, month]);
+  }, [data.transactions, month, trendWindow]);
+  const trendCanGoEarlier = dailyTrend[0]?.key !== dateKey(new Date(month.getFullYear(), month.getMonth(), 1));
+  const trendCanGoLater = trendWindow > 0;
+  const trendRange = dailyTrend.length ? `${dailyTrend[0].label}—${dailyTrend.at(-1)?.label}` : '';
 
   const visibleRecords = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return monthTransactions.filter((tx) => {
       const matchesType = recordFilter === 'all' || tx.type === recordFilter;
-      const matchesDate = recordDateFilter === 'all' || tx.date === relativeDate(0);
+      const matchesDate = recordDateFilter === 'all' || tx.date === recordDateFilter;
+      const matchesCategory = !recordCategoryFilter || (tx.category === recordCategoryFilter.name && tx.type === recordCategoryFilter.type);
       const matchesAccount = recordAccountFilter === 'all' || tx.accountId === recordAccountFilter;
       const matchesQuery = !normalized || tx.note.toLowerCase().includes(normalized) || tx.category.toLowerCase().includes(normalized);
-      return matchesType && matchesDate && matchesAccount && matchesQuery;
+      return matchesType && matchesDate && matchesCategory && matchesAccount && matchesQuery;
+    }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  }, [monthTransactions, query, recordAccountFilter, recordCategoryFilter, recordDateFilter, recordFilter]);
+
+  const recordGroups = useMemo(() => {
+    const groups: Array<{ date: string; transactions: Transaction[] }> = [];
+    visibleRecords.forEach((transaction) => {
+      const current = groups.at(-1);
+      if (current?.date === transaction.date) current.transactions.push(transaction);
+      else groups.push({ date: transaction.date, transactions: [transaction] });
     });
-  }, [monthTransactions, query, recordAccountFilter, recordDateFilter, recordFilter]);
+    return groups;
+  }, [visibleRecords]);
 
   const accent = data.theme === 'custom' ? data.customAccent : themeOptions.find((item) => item.id === data.theme)?.accent ?? themeOptions[0].accent;
   const themeStyle = {
@@ -524,23 +568,88 @@ export default function HomePage() {
     setOperator(null);
   }
 
-  function openAllRecords() {
-    setRecordDateFilter('all');
+  function changeMonth(nextMonth: Date) {
+    setMonth(nextMonth);
+    setTrendWindow(0);
+  }
+
+  function openRecordDetail(origin: Exclude<Tab, 'records'>) {
+    recordsOriginScroll.current = pageScrollRef.current?.scrollTop ?? 0;
+    pushLayer('records-detail');
+    setRecordsOrigin(origin);
+    setQuery('');
     setTab('records');
+    window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: 0 }));
+  }
+
+  function openAllRecords() {
+    setRecordFilter('all');
+    setRecordDateFilter('all');
+    setRecordCategoryFilter(null);
+    setRecordAccountFilter('all');
+    openRecordDetail('home');
   }
 
   function openTodayRecords() {
     const now = new Date();
-    setMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+    changeMonth(new Date(now.getFullYear(), now.getMonth(), 1));
     setRecordFilter('expense');
     setRecordAccountFilter('all');
-    setRecordDateFilter('today');
-    setQuery('');
-    setTab('records');
+    setRecordDateFilter(relativeDate(0));
+    setRecordCategoryFilter(null);
+    openRecordDetail('home');
   }
 
-  function pushLayer(layer: 'entry' | 'settings') {
+  function openCategoryRecords(name: string, type: TxType) {
+    setRecordFilter(type);
+    setRecordDateFilter('all');
+    setRecordCategoryFilter({ name, type });
+    setRecordAccountFilter('all');
+    openRecordDetail('stats');
+  }
+
+  function openDateRecords(date: string) {
+    setMonth(new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, 1));
+    setRecordFilter('all');
+    setRecordDateFilter(date);
+    setRecordCategoryFilter(null);
+    setRecordAccountFilter('all');
+    openRecordDetail('stats');
+  }
+
+  function openAccountRecords(accountId: string) {
+    setRecordFilter('expense');
+    setRecordDateFilter('all');
+    setRecordCategoryFilter(null);
+    setRecordAccountFilter(accountId);
+    openRecordDetail('stats');
+  }
+
+  function pushLayer(layer: 'entry' | 'settings' | 'records-detail') {
     window.history.pushState({ ...window.history.state, ledgerLayer: layer }, '');
+  }
+
+  function clearRecordOrigin() {
+    if (window.history.state?.ledgerLayer === 'records-detail') {
+      const nextState = { ...window.history.state };
+      delete nextState.ledgerLayer;
+      window.history.replaceState(nextState, '');
+    }
+    setRecordsOrigin(null);
+  }
+
+  function switchTab(nextTab: Exclude<Tab, 'records'>) {
+    clearRecordOrigin();
+    setTab(nextTab);
+  }
+
+  function dismissRecordDetail() {
+    if (window.history.state?.ledgerLayer === 'records-detail') window.history.back();
+    else if (recordsOrigin) {
+      setTab(recordsOrigin);
+      setRecordsOrigin(null);
+      window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: recordsOriginScroll.current }));
+    }
   }
 
   function dismissEntry() {
@@ -895,14 +1004,14 @@ export default function HomePage() {
   return (
     <main className="app-shell">
       <section className="phone-surface" style={themeStyle}>
-        <div className="page-scroll">
+        <div className="page-scroll" ref={pageScrollRef}>
           {tab === 'home' && (
             <div className="page page-home">
               <header className="brand-topbar">
                 <div className="brand-lockup"><span className="brand-mark"><img src="/app-icon.png" alt="" /></span><div><b>拾账 · 账户版</b><span>看清今天，也安排好未来</span></div></div>
-                <button className="avatar" onClick={() => setTab('profile')} aria-label="打开个人设置">{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</button>
+                <button className="avatar" onClick={() => switchTab('profile')} aria-label="打开个人设置">{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</button>
               </header>
-              <div className="home-period"><div><p className="eyebrow">LEDGER</p><h1>{month.getMonth() + 1} 月账本</h1></div><MonthControl value={month} onChange={setMonth} /></div>
+              <div className="home-period"><div><p className="eyebrow">LEDGER</p><h1>{month.getMonth() + 1} 月账本</h1></div><MonthControl value={month} onChange={changeMonth} /></div>
               <button className="today-card" onClick={() => todayExpenses.length ? openTodayRecords() : openNew()} aria-label={todayExpenses.length ? `今日花费 ${formatMoney(todaySpent)}，查看今日明细` : '今日还没有支出，记下第一笔'}>
                 <span className="today-heading"><span><small>TODAY</small><b>今日花费</b></span><CalendarDays size={21} /></span>
                 <strong>{formatMoney(todaySpent)}</strong>
@@ -914,12 +1023,12 @@ export default function HomePage() {
                 <div><span><ArrowUpRight size={13} />支出</span><strong>{formatMoney(totals.expense)}</strong></div>
               </section>
               <section className="money-radar" aria-label="职场现金流提醒">
-                <div className="radar-heading"><div><p className="eyebrow">MONEY RADAR</p><h2>接下来要付的钱</h2></div><button onClick={() => setTab('accounts')}>管理账户<ChevronRight size={15} /></button></div>
+                <div className="radar-heading"><div><p className="eyebrow">MONEY RADAR</p><h2>接下来要付的钱</h2></div><button onClick={() => switchTab('accounts')}>管理账户<ChevronRight size={15} /></button></div>
                 <div className="radar-grid">
-                  <button onClick={() => setTab('accounts')}><span className="radar-icon"><CreditCard size={18} /></span><span><small>信用待还</small><strong>{formatMoney(creditOutstanding)}</strong></span></button>
-                  <button onClick={() => setTab('accounts')}><span className="radar-icon"><CalendarDays size={18} /></span><span><small>未来 7 天待付</small><strong>{formatMoney(dueSoon)}</strong></span></button>
+                  <button onClick={() => switchTab('accounts')}><span className="radar-icon"><CreditCard size={18} /></span><span><small>信用待还</small><strong>{formatMoney(creditOutstanding)}</strong></span></button>
+                  <button onClick={() => switchTab('accounts')}><span className="radar-icon"><CalendarDays size={18} /></span><span><small>未来 7 天待付</small><strong>{formatMoney(dueSoon)}</strong></span></button>
                 </div>
-                {data.accounts.length ? <div className="radar-note"><span>分期月供 {formatMoney(installmentMonthly)}</span><span>待报销 {formatMoney(pendingReimbursement)}</span></div> : <button className="account-onboarding" onClick={() => setTab('accounts')}><span><Landmark size={18} /><b>添加你的第一个账户</b></span><small>银行卡、微信、支付宝或信用卡</small><ChevronRight size={18} /></button>}
+                {data.accounts.length ? <div className="radar-note"><span>分期月供 {formatMoney(installmentMonthly)}</span><span>待报销 {formatMoney(pendingReimbursement)}</span></div> : <button className="account-onboarding" onClick={() => switchTab('accounts')}><span><Landmark size={18} /><b>添加你的第一个账户</b></span><small>银行卡、微信、支付宝或信用卡</small><ChevronRight size={18} /></button>}
               </section>
               <button className={`budget-strip ${data.budget ? '' : 'is-empty'}`} onClick={() => openSettings('budget')}>
                 {data.budget ? <><span className="budget-line"><span>{month.getMonth() + 1} 月预算</span><b>已用 {budgetPercent}%</b></span><span className="progress"><i style={{ width: `${budgetPercent}%` }} /></span><small>{data.budget - totals.expense >= 0 ? `还可以花 ${formatMoney(data.budget - totals.expense)}` : `已超出 ${formatMoney(totals.expense - data.budget)}`}</small></> : <><span><Settings2 size={18} />设置月预算</span><small>给本月支出定一个上限</small><ChevronRight size={18} /></>}
@@ -959,25 +1068,25 @@ export default function HomePage() {
 
           {tab === 'stats' && (
             <div className="page">
-              <header className="page-header"><div><p className="eyebrow">INSIGHTS</p><h1>收支统计</h1></div><MonthControl value={month} onChange={setMonth} /></header>
+              <header className="page-header"><div><p className="eyebrow">INSIGHTS</p><h1>收支统计</h1></div><MonthControl value={month} onChange={changeMonth} /></header>
               <section className="stats-summary"><div><span>支出</span><strong>{formatMoney(totals.expense)}</strong></div><div><span>收入</span><strong>{formatMoney(totals.income)}</strong></div><div><span>结余</span><strong>{formatMoney(totals.income - totals.expense)}</strong></div></section>
               <section className="panel analysis-panel">
                 <div className="panel-title"><div><p className="eyebrow">BREAKDOWN</p><h2>支出去向</h2></div><span>{monthTransactions.filter((tx) => tx.type === 'expense').length} 笔</span></div>
-                {totals.expense ? <><div className="donut-layout"><div className="donut" style={{ background: donutGradient }}><div><span>总支出</span><b>{formatMoney(totals.expense, 0)}</b></div></div><div className="top-category"><span>最高支出</span><b>{categoryTotals[0]?.name}</b><strong>{categoryTotals[0] ? Math.round(categoryTotals[0].amount / totals.expense * 100) : 0}%</strong></div></div><div className="category-breakdown">{categoryTotals.map((item) => <div key={item.name}><i style={{ background: item.color }} /><span>{item.name}</span><div className="mini-track"><i style={{ width: `${item.amount / totals.expense * 100}%`, background: item.color }} /></div><b>{formatMoney(item.amount, 0)}</b></div>)}</div></> : emptyState('本月还没有支出')}
+                {totals.expense ? <><div className="donut-layout"><div className="donut" style={{ background: donutGradient }}><div><span>总支出</span><b>{formatMoney(totals.expense, 0)}</b></div></div><div className="top-category"><span>最高支出</span><b>{categoryTotals[0]?.name}</b><strong>{categoryTotals[0] ? Math.round(categoryTotals[0].amount / totals.expense * 100) : 0}%</strong></div></div><div className="category-breakdown">{categoryTotals.map((item) => <button key={item.name} onClick={() => openCategoryRecords(item.name, 'expense')} aria-label={`查看${item.name}明细`}><i style={{ background: item.color }} /><span>{item.name}</span><div className="mini-track"><i style={{ width: `${item.amount / totals.expense * 100}%`, background: item.color }} /></div><b>{formatMoney(item.amount, 0)}</b><ChevronRight size={14} /></button>)}</div></> : emptyState('本月还没有支出')}
               </section>
-              {accountExpenseTotals.length > 0 && <section className="panel"><div className="panel-title"><div><p className="eyebrow">BY ACCOUNT</p><h2>账户支出</h2></div><span>{accountExpenseTotals.length} 个账户</span></div><div className="account-breakdown">{accountExpenseTotals.map((item) => <button key={item.accountId || 'unspecified'} onClick={() => { setRecordAccountFilter(item.accountId); setRecordFilter('expense'); setRecordDateFilter('all'); setTab('records'); }}><span className="radar-icon"><WalletCards size={17} /></span><span><b>{item.name}</b><small>{totals.expense ? Math.round(item.amount / totals.expense * 100) : 0}% 的本月支出</small></span><strong>{formatMoney(item.amount)}</strong><ChevronRight size={15} /></button>)}</div></section>}
-              <section className="panel trend-panel"><div className="panel-title"><div><p className="eyebrow">7 DAYS</p><h2>每日趋势</h2></div></div><div className="bar-chart">{dailyTrend.map((day) => { const max = Math.max(...dailyTrend.map((item) => item.amount), 1); return <div className="bar-column" key={day.key}><span>{day.amount ? formatMoney(day.amount, 0) : ''}</span><i style={{ height: `${Math.max(day.amount ? 12 : 3, day.amount / max * 92)}px` }} /><small>{day.label}</small></div>; })}</div></section>
+              {accountExpenseTotals.length > 0 && <section className="panel"><div className="panel-title"><div><p className="eyebrow">BY ACCOUNT</p><h2>账户支出</h2></div><span>{accountExpenseTotals.length} 个账户</span></div><div className="account-breakdown">{accountExpenseTotals.map((item) => <button key={item.accountId || 'unspecified'} onClick={() => openAccountRecords(item.accountId)}><span className="radar-icon"><WalletCards size={17} /></span><span><b>{item.name}</b><small>{totals.expense ? Math.round(item.amount / totals.expense * 100) : 0}% 的本月支出</small></span><strong>{formatMoney(item.amount)}</strong><ChevronRight size={15} /></button>)}</div></section>}
+              <section className="panel trend-panel"><div className="panel-title"><div><p className="eyebrow">7 DAYS</p><h2>每日趋势</h2></div><div className="trend-navigation"><button disabled={!trendCanGoEarlier} onClick={() => setTrendWindow((current) => current + 1)} aria-label="查看更早七天"><ChevronLeft size={15} /></button><span>{trendRange}</span><button disabled={!trendCanGoLater} onClick={() => setTrendWindow((current) => Math.max(0, current - 1))} aria-label="查看较新七天"><ChevronRight size={15} /></button></div></div><div className="bar-chart">{dailyTrend.map((day) => { const max = Math.max(...dailyTrend.map((item) => item.amount), 1); return <button className="bar-column" key={day.key} onClick={() => openDateRecords(day.key)} aria-label={`查看${day.label}明细`}><span>{day.amount ? formatMoney(day.amount, 0) : ''}</span><i style={{ height: `${Math.max(day.amount ? 12 : 3, day.amount / max * 92)}px` }} /><small>{day.label}</small></button>; })}</div></section>
             </div>
           )}
 
           {tab === 'records' && (
             <div className="page">
-              <header className="page-header"><div><p className="eyebrow">LEDGER</p><h1>{recordDateFilter === 'today' ? '今日明细' : '全部明细'}</h1></div><MonthControl value={month} onChange={(next) => { setMonth(next); setRecordDateFilter('all'); }} /></header>
+              <header className="page-header"><div className="records-heading">{recordsOrigin && <button className="detail-back" onClick={dismissRecordDetail} aria-label="返回上一页"><ChevronLeft size={19} /></button>}<div><p className="eyebrow">LEDGER</p><h1>{recordCategoryFilter ? `${recordCategoryFilter.name}明细` : recordDateFilter !== 'all' ? `${friendlyDate(recordDateFilter)}明细` : recordAccountFilter !== 'all' ? `${data.accounts.find((item) => item.id === recordAccountFilter)?.name || '未指定账户'}明细` : '全部明细'}</h1></div></div><MonthControl value={month} onChange={(next) => { changeMonth(next); setRecordDateFilter('all'); }} /></header>
               <label className="search-box"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索分类或备注" aria-label="搜索账单" />{query && <button onClick={() => setQuery('')} aria-label="清空搜索"><X size={16} /></button>}</label>
-              <div className="filter-row"><ListFilter size={17} />{recordDateFilter === 'today' && <button className="active" onClick={() => setRecordDateFilter('all')}>今日 ×</button>}{([['all', '全部'], ['expense', '支出'], ['income', '收入']] as const).map(([value, label]) => <button className={recordFilter === value ? 'active' : ''} key={value} onClick={() => setRecordFilter(value)}>{label}</button>)}<span>{visibleRecords.length} 笔</span></div>
+              <div className="filter-row"><ListFilter size={17} />{recordDateFilter !== 'all' && <button className="active" onClick={() => setRecordDateFilter('all')}>{friendlyDate(recordDateFilter)} ×</button>}{recordCategoryFilter && <button className="active" onClick={() => setRecordCategoryFilter(null)}>{recordCategoryFilter.name} ×</button>}{([['all', '全部'], ['expense', '支出'], ['income', '收入']] as const).map(([value, label]) => <button className={recordFilter === value ? 'active' : ''} key={value} onClick={() => setRecordFilter(value)}>{label}</button>)}<span>{visibleRecords.length} 笔</span></div>
               {data.accounts.length > 0 && <label className="account-filter"><WalletCards size={16} /><select value={recordAccountFilter} onChange={(event) => setRecordAccountFilter(event.target.value)}><option value="all">全部账户</option><option value="">未指定账户</option>{data.accounts.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><ChevronRight size={15} /></label>}
               <div className="records-total"><span>筛选合计</span><b>支出 {formatMoney(visibleRecords.filter((tx) => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0))}</b></div>
-              <section className="transaction-list records-list">{visibleRecords.length ? visibleRecords.map(renderTransaction) : emptyState('没有匹配的记录')}</section>
+              {recordGroups.length ? <div className="record-groups">{recordGroups.map((group) => <section className="record-group" key={group.date}><div className="record-group-title"><b>{friendlyDate(group.date)}</b><span>{group.transactions.length} 笔</span></div><div className="transaction-list records-list">{group.transactions.map(renderTransaction)}</div></section>)}</div> : <section className="transaction-list records-list">{emptyState('没有匹配的记录')}</section>}
             </div>
           )}
 
@@ -987,27 +1096,23 @@ export default function HomePage() {
               <button className="profile-hero" onClick={() => openSettings('profile')}><span className="profile-avatar-large">{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</span><span className="profile-copy"><b>{data.owner || '我的账本'}</b><small>本机账本 · {data.transactions.length} 笔记录</small></span><ChevronRight size={19} /></button>
               <section className="profile-overview"><div><b>{data.accounts.length}</b><span>账户</span></div><div><b>{formatMoney(creditOutstanding, 0)}</b><span>信用待还</span></div><div><b>{formatMoney(pendingReimbursement, 0)}</b><span>待报销</span></div></section>
               <div className="settings-group"><p>账本设置</p><div className="menu-list">
-                <button onClick={() => setTab('accounts')}><span className="menu-icon"><WalletCards /></span><span><b>账户与还款</b><small>{data.accounts.length ? `${data.accounts.length} 个账户` : '添加第一个账户'}</small></span><ChevronRight /></button>
+                <button onClick={() => switchTab('accounts')}><span className="menu-icon"><WalletCards /></span><span><b>账户与还款</b><small>{data.accounts.length ? `${data.accounts.length} 个账户` : '添加第一个账户'}</small></span><ChevronRight /></button>
                 <button onClick={() => openSettings('budget')}><span className="menu-icon"><WalletCards /></span><span><b>预算设置</b><small>{data.budget ? `每月 ${formatMoney(data.budget, 0)}` : '还未设置'}</small></span><ChevronRight /></button>
                 <button onClick={() => openSettings('categories')}><span className="menu-icon"><Tags /></span><span><b>分类管理</b><small>{enabledExpense.length + enabledIncome.length} 个分类已启用</small></span><ChevronRight /></button>
                 <button onClick={() => openSettings('theme')}><span className="menu-icon"><Palette /></span><span><b>主题与外观</b><small>{activeThemeName}</small></span><i className="theme-dot" style={{ background: accent }} /><ChevronRight /></button>
               </div></div>
-              <div className="settings-group"><p>数据与安全</p><div className="menu-list">
-                <button onClick={exportCsv}><span className="menu-icon"><Download /></span><span><b>导出账单</b><small>保存为 CSV 文件</small></span><ChevronRight /></button>
-                <button onClick={clearTransactions} className="danger-row"><span className="menu-icon"><Trash2 /></span><span><b>清空所有账目</b><small>保留你的昵称、主题和设置</small></span><ChevronRight /></button>
-              </div></div>
-              <div className="settings-group"><p>关于</p><div className="menu-list"><button onClick={() => openSettings('about')}><span className="menu-icon"><Info /></span><span><b>关于拾账</b><small>本机存储 · 简单安心</small></span><ChevronRight /></button></div></div>
+              <div className="settings-group"><p>其他</p><div className="menu-list"><button onClick={() => openSettings('settings')}><span className="menu-icon"><Settings2 /></span><span><b>设置</b><small>数据安全与账本信息</small></span><ChevronRight /></button><button onClick={() => openSettings('about')}><span className="menu-icon"><Info /></span><span><b>关于拾账</b><small>本机存储 · 简单安心</small></span><ChevronRight /></button></div></div>
               <p className="local-note"><ShieldCheck size={14} />数据只保存在你的设备中，不上传云端</p>
             </div>
           )}
         </div>
 
         <nav className="tabbar" aria-label="主要导航">
-          <button className={tab === 'home' ? 'active' : ''} onClick={() => setTab('home')}><Home /><span>首页</span></button>
-          <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}><WalletCards /><span>账户</span></button>
+          <button className={tab === 'home' ? 'active' : ''} onClick={() => switchTab('home')}><Home /><span>首页</span></button>
+          <button className={tab === 'accounts' ? 'active' : ''} onClick={() => switchTab('accounts')}><WalletCards /><span>账户</span></button>
           <button className="add-button" onClick={() => openNew()} aria-label="记一笔"><Plus /></button>
-          <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}><BarChart3 /><span>统计</span></button>
-          <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}><CircleUserRound /><span>我的</span></button>
+          <button className={tab === 'stats' ? 'active' : ''} onClick={() => switchTab('stats')}><BarChart3 /><span>统计</span></button>
+          <button className={tab === 'profile' ? 'active' : ''} onClick={() => switchTab('profile')}><CircleUserRound /><span>我的</span></button>
         </nav>
 
         {entryOpen && (
@@ -1034,7 +1139,7 @@ export default function HomePage() {
         {settingsPanel && (
           <div className="settings-layer" role="dialog" aria-modal="true" aria-label="拾账账户版设置">
             <button className="settings-backdrop" onClick={dismissSettings} aria-label="关闭设置" />
-            <section className="settings-sheet"><div className="sheet-handle" /><header><div><p className="eyebrow">SETTINGS</p><h2>{settingsPanel === 'profile' ? '个人资料' : settingsPanel === 'theme' ? '主题与外观' : settingsPanel === 'budget' ? '预算设置' : settingsPanel === 'categories' ? '分类管理' : settingsPanel === 'account' ? '添加账户' : settingsPanel === 'bill' ? '添加固定账单' : settingsPanel === 'repayment' ? '记录还款' : '关于拾账账户版'}</h2></div><button onClick={dismissSettings} aria-label="关闭"><X size={20} /></button></header>
+            <section className="settings-sheet"><div className="sheet-handle" /><header><div><p className="eyebrow">SETTINGS</p><h2>{settingsPanel === 'profile' ? '个人资料' : settingsPanel === 'theme' ? '主题与外观' : settingsPanel === 'budget' ? '预算设置' : settingsPanel === 'categories' ? '分类管理' : settingsPanel === 'settings' ? '设置' : settingsPanel === 'account' ? '添加账户' : settingsPanel === 'bill' ? '添加固定账单' : settingsPanel === 'repayment' ? '记录还款' : '关于拾账账户版'}</h2></div><button onClick={dismissSettings} aria-label="关闭"><X size={20} /></button></header>
               {settingsPanel === 'profile' && <div className="sheet-content"><div className="avatar-picker"><span>{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</span><div className="avatar-options"><label className="avatar-upload"><ImagePlus size={17} /><b>{data.avatarImage ? '更换照片' : '上传照片'}</b><input type="file" accept="image/*" onChange={handleAvatarUpload} /></label></div></div><label className="form-field"><span><UserRound size={17} />账本昵称</span><input maxLength={12} value={data.owner} onChange={(event) => setData((current) => ({ ...current, owner: event.target.value }))} placeholder="输入你的昵称" /></label><label className="form-field"><span><Pencil size={17} />简约文字头像</span><input maxLength={2} value={data.avatar} onChange={(event) => setData((current) => ({ ...current, avatar: event.target.value, avatarImage: '' }))} placeholder="1—2 个字或符号" /></label></div>}
               {settingsPanel === 'theme' && <div className="sheet-content"><p className="sheet-tip">选择一种喜欢的主色，界面会立即更新。</p><div className="theme-list">{themeOptions.map((item) => <button className={data.theme === item.id ? 'active' : ''} key={item.id} onClick={() => setData((current) => ({ ...current, theme: item.id }))}><i style={{ background: item.accent }} /><span>{item.name}</span>{data.theme === item.id && <Check size={18} />}</button>)}<label className={data.theme === 'custom' ? 'active custom-color' : 'custom-color'} onClick={() => setData((current) => ({ ...current, theme: 'custom' }))}><i style={{ background: data.customAccent }}><Palette size={15} /></i><span>自定义颜色</span>{data.theme === 'custom' && <Check size={18} />}<input type="color" value={data.customAccent} onChange={(event) => setData((current) => ({ ...current, theme: 'custom', customAccent: event.target.value }))} /></label></div></div>}
               {settingsPanel === 'budget' && <div className="sheet-content"><p className="sheet-tip">预算从 0 开始，你可以随时修改；设为 0 即关闭提醒。</p><label className="budget-editor"><span>¥</span><input autoFocus inputMode="decimal" value={data.budget || ''} onChange={(event) => setData((current) => ({ ...current, budget: Math.max(0, Number(event.target.value)) }))} placeholder="0" /></label><div className="budget-presets">{[1000, 3000, 5000, 8000].map((value) => <button key={value} onClick={() => setData((current) => ({ ...current, budget: value }))}>{formatMoney(value, 0)}</button>)}</div></div>}
@@ -1042,7 +1147,8 @@ export default function HomePage() {
               {settingsPanel === 'account' && <form className="sheet-content account-form" onSubmit={saveAccount}><p className="sheet-tip">普通账户可以只作为付款方式；信用账户会计算待还金额、可用额度和还款日。</p><div className="choice-grid">{([['payment', '微信/支付宝', WalletCards], ['bank', '银行卡', Landmark], ['cash', '现金', Banknote], ['credit', '信用卡', CreditCard]] as const).map(([value, label, Icon]) => <button type="button" className={accountDraft.type === value ? 'active' : ''} key={value} onClick={() => setAccountDraft((current) => ({ ...current, type: value, trackBalance: value === 'bank' || value === 'cash' || value === 'credit' }))}><Icon size={18} /><span>{label}</span></button>)}</div><label className="form-field"><span><WalletCards size={17} />账户名称</span><input autoFocus maxLength={12} value={accountDraft.name} onChange={(event) => setAccountDraft((current) => ({ ...current, name: event.target.value }))} placeholder={accountDraft.type === 'credit' ? '例如：招商信用卡' : '例如：微信钱包'} /></label><label className="form-field"><span><Info size={17} />尾号（可选）</span><input inputMode="numeric" maxLength={4} value={accountDraft.last4} onChange={(event) => setAccountDraft((current) => ({ ...current, last4: event.target.value.replace(/\D/g, '') }))} placeholder="银行卡后 4 位" /></label>{accountDraft.type !== 'credit' && <label className="switch-row"><span><b>跟踪实际余额</b><small>关闭后只记录付款方式</small></span><input type="checkbox" checked={accountDraft.trackBalance} onChange={(event) => setAccountDraft((current) => ({ ...current, trackBalance: event.target.checked }))} /></label>}{(accountDraft.trackBalance || accountDraft.type === 'credit') && <label className="form-field"><span><CircleDollarSign size={17} />{accountDraft.type === 'credit' ? '当前已欠金额' : '当前余额'}</span><input inputMode="decimal" value={accountDraft.openingBalance} onChange={(event) => setAccountDraft((current) => ({ ...current, openingBalance: event.target.value }))} placeholder="0" /></label>}{accountDraft.type === 'credit' && <><label className="form-field"><span><CreditCard size={17} />信用额度</span><input inputMode="decimal" value={accountDraft.creditLimit} onChange={(event) => setAccountDraft((current) => ({ ...current, creditLimit: event.target.value }))} placeholder="例如：30000" /></label><div className="dual-fields"><label><span>账单日</span><input inputMode="numeric" value={accountDraft.statementDay} onChange={(event) => setAccountDraft((current) => ({ ...current, statementDay: event.target.value }))} /></label><label><span>还款日</span><input inputMode="numeric" value={accountDraft.dueDay} onChange={(event) => setAccountDraft((current) => ({ ...current, dueDay: event.target.value }))} /></label></div></>}<button className="primary-form-action" type="submit">保存账户</button></form>}
               {settingsPanel === 'bill' && <form className="sheet-content account-form" onSubmit={saveBill}><p className="sheet-tip">固定账单不会直接生成支出，只会在到期前提醒你；付款后再记一笔即可。</p><label className="form-field"><span><Repeat2 size={17} />账单名称</span><input autoFocus maxLength={16} value={billDraft.title} onChange={(event) => setBillDraft((current) => ({ ...current, title: event.target.value }))} placeholder="例如：房租、视频会员" /></label><label className="form-field"><span><CircleDollarSign size={17} />每月金额</span><input inputMode="decimal" value={billDraft.amount} onChange={(event) => setBillDraft((current) => ({ ...current, amount: event.target.value }))} placeholder="0" /></label><div className="dual-fields"><label><span>每月付款日</span><input inputMode="numeric" value={billDraft.dueDay} onChange={(event) => setBillDraft((current) => ({ ...current, dueDay: event.target.value }))} /></label><label><span>付款账户</span><select value={billDraft.accountId} onChange={(event) => setBillDraft((current) => ({ ...current, accountId: event.target.value }))}><option value="">未指定</option>{data.accounts.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div><button className="primary-form-action" type="submit">保存固定账单</button></form>}
               {settingsPanel === 'repayment' && <form className="sheet-content account-form" onSubmit={saveRepayment}><p className="sheet-tip">还信用卡属于账户之间的资金移动，不会再次计入消费支出。</p><label className="form-field"><span><CreditCard size={17} />偿还账户</span><select value={repaymentAccountId} onChange={(event) => setRepaymentAccountId(event.target.value)}>{data.accounts.filter((item) => item.type === 'credit').map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="form-field"><span><Landmark size={17} />付款来源</span><select value={repaymentFromId} onChange={(event) => setRepaymentFromId(event.target.value)}><option value="external">外部账户 / 不跟踪余额</option>{data.accounts.filter((item) => item.type !== 'credit').map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="form-field"><span><CircleDollarSign size={17} />还款金额</span><input autoFocus inputMode="decimal" value={repaymentAmount} onChange={(event) => setRepaymentAmount(event.target.value)} placeholder="0" /></label><label className="form-field"><span><CalendarDays size={17} />还款日期</span><input type="date" value={repaymentDate} onChange={(event) => setRepaymentDate(event.target.value)} /></label><button className="primary-form-action" type="submit">确认还款</button></form>}
-              {settingsPanel === 'about' && <div className="sheet-content about-card"><img src="/app-icon.png" alt="拾账图标" /><h3>拾账 · 账户版</h3><p>为职场人设计的轻量账户与还款管理工具。消费只记一次，还款只做转账，避免重复统计。</p><span><ShieldCheck size={17} />所有数据仅存于本机</span><small>账户版 0.1</small></div>}
+              {settingsPanel === 'settings' && <div className="sheet-content"><p className="sheet-tip">账目数据只保存在当前设备。建议定期导出账单；清空后无法撤销。</p><div className="settings-group"><p>数据与安全</p><div className="menu-list"><button onClick={exportCsv}><span className="menu-icon"><Download /></span><span><b>导出账单</b><small>保存为 CSV 文件</small></span><ChevronRight /></button><button onClick={clearTransactions} className="danger-row"><span className="menu-icon"><Trash2 /></span><span><b>清空所有账目</b><small>保留账户、昵称、主题和设置</small></span><ChevronRight /></button></div></div><p className="local-note"><ShieldCheck size={14} />数据只保存在你的设备中，不上传云端</p></div>}
+              {settingsPanel === 'about' && <div className="sheet-content about-card"><img src="/app-icon.png" alt="拾账图标" /><h3>拾账 · 账户版</h3><p>为职场人设计的轻量账户与还款管理工具。消费只记一次，还款只做转账，避免重复统计。</p><span><ShieldCheck size={17} />所有数据仅存于本机</span><small>账户版 0.2</small></div>}
             </section>
           </div>
         )}
