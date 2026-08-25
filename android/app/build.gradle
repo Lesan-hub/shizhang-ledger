@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 
+def shizhangUpdateKeystore = System.getenv('SHIZHANG_UPDATE_KEYSTORE')
+
 android {
     namespace "com.qingzhang.ledger"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +9,8 @@ android {
         applicationId "com.qingzhang.ledger"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.1"
+        versionCode 3
+        versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +18,26 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (shizhangUpdateKeystore) {
+            upgrade {
+                storeFile file(shizhangUpdateKeystore)
+                storePassword System.getenv('SHIZHANG_UPDATE_STORE_PASSWORD') ?: 'android'
+                keyAlias System.getenv('SHIZHANG_UPDATE_KEY_ALIAS') ?: 'androiddebugkey'
+                keyPassword System.getenv('SHIZHANG_UPDATE_KEY_PASSWORD') ?: 'android'
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (shizhangUpdateKeystore) {
+                signingConfig signingConfigs.upgrade
+            }
+        }
         release {
+            if (shizhangUpdateKeystore) {
+                signingConfig signingConfigs.upgrade
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

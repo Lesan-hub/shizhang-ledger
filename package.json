@@ -1,6 +1,6 @@
 {
   "name": "shizhang-ledger",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "拾账：简洁、快速、数据保存在本机的个人记账应用",
   "private": true,
   "license": "MIT",

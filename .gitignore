@@ -19,6 +19,9 @@
 # misc
 .DS_Store
 *.pem
+*.jks
+*.keystore
+android/signing.properties
 
 # debug
 npm-debug.log*

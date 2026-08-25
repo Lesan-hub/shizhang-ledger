@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties, FormEvent } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import type { LucideIcon } from 'lucide-react';
@@ -56,7 +56,7 @@ import {
 type TxType = 'expense' | 'income';
 type Tab = 'home' | 'stats' | 'records' | 'profile';
 type ThemeId = 'sunny' | 'forest' | 'ink' | 'ocean' | 'sunset' | 'plum' | 'custom';
-type SettingsPanel = 'profile' | 'theme' | 'budget' | 'categories' | 'about' | null;
+type SettingsPanel = 'profile' | 'theme' | 'budget' | 'categories' | 'settings' | 'about' | null;
 
 type Transaction = {
   id: string;
@@ -225,10 +225,13 @@ function MonthControl({ value, onChange }: { value: Date; onChange: (date: Date)
 }
 
 export default function HomePage() {
+  const pageScrollRef = useRef<HTMLDivElement>(null);
+  const recordsOriginScroll = useRef(0);
   const [data, setData] = useState<LedgerData>(() => buildEmpty());
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [trendWindow, setTrendWindow] = useState(0);
   const [entryOpen, setEntryOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftType, setDraftType] = useState<TxType>('expense');
@@ -239,7 +242,9 @@ export default function HomePage() {
   const [note, setNote] = useState('');
   const [txDate, setTxDate] = useState(relativeDate(0));
   const [recordFilter, setRecordFilter] = useState<'all' | TxType>('all');
-  const [recordDateFilter, setRecordDateFilter] = useState<'all' | 'today'>('all');
+  const [recordDateFilter, setRecordDateFilter] = useState<'all' | string>('all');
+  const [recordCategoryFilter, setRecordCategoryFilter] = useState<{ name: string; type: TxType } | null>(null);
+  const [recordsOrigin, setRecordsOrigin] = useState<Tab | null>(null);
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState('');
   const [settingsPanel, setSettingsPanel] = useState<SettingsPanel>(null);
@@ -287,12 +292,23 @@ export default function HomePage() {
 
   useEffect(() => {
     const closeTopLayer = () => {
-      setEntryOpen(false);
-      setSettingsPanel(null);
+      if (entryOpen) {
+        setEntryOpen(false);
+        return;
+      }
+      if (settingsPanel) {
+        setSettingsPanel(null);
+        return;
+      }
+      if (recordsOrigin) {
+        setTab(recordsOrigin);
+        setRecordsOrigin(null);
+        window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: recordsOriginScroll.current }));
+      }
     };
     window.addEventListener('popstate', closeTopLayer);
     return () => window.removeEventListener('popstate', closeTopLayer);
-  }, []);
+  }, [entryOpen, recordsOrigin, settingsPanel]);
 
   useEffect(() => {
     let disposed = false;
@@ -306,6 +322,15 @@ export default function HomePage() {
         dismissSettings();
         return;
       }
+      if (recordsOrigin) {
+        if (window.history.state?.ledgerLayer === 'records-detail') window.history.back();
+        else {
+          setTab(recordsOrigin);
+          setRecordsOrigin(null);
+          window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: recordsOriginScroll.current }));
+        }
+        return;
+      }
       if (canGoBack) window.history.back();
       else void CapacitorApp.exitApp();
     }).then((handle) => {
@@ -316,7 +341,7 @@ export default function HomePage() {
       disposed = true;
       if (removeListener) void removeListener();
     };
-  }, [entryOpen, settingsPanel]);
+  }, [entryOpen, recordsOrigin, settingsPanel]);
 
   const monthTransactions = useMemo(
     () => data.transactions.filter((transaction) => transaction.date.startsWith(monthKey(month))).sort((a, b) => b.createdAt - a.createdAt),
@@ -353,25 +378,44 @@ export default function HomePage() {
   const dailyTrend = useMemo(() => {
     const days: { key: string; label: string; amount: number }[] = [];
     const now = new Date();
-    const end = monthKey(month) === monthKey(now) ? new Date(now) : new Date(month.getFullYear(), month.getMonth() + 1, 0);
-    for (let offset = 6; offset >= 0; offset -= 1) {
-      const day = new Date(end);
-      day.setDate(end.getDate() - offset);
+    const monthStart = new Date(month.getFullYear(), month.getMonth(), 1, 12);
+    const latestDay = monthKey(month) === monthKey(now) ? new Date(now) : new Date(month.getFullYear(), month.getMonth() + 1, 0, 12);
+    latestDay.setHours(12, 0, 0, 0);
+    const end = new Date(latestDay);
+    end.setDate(latestDay.getDate() - trendWindow * 7);
+    const start = new Date(end);
+    start.setDate(end.getDate() - 6);
+    if (start < monthStart) start.setTime(monthStart.getTime());
+    for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
       const key = dateKey(day);
       days.push({ key, label: `${day.getMonth() + 1}/${day.getDate()}`, amount: data.transactions.filter((tx) => tx.type === 'expense' && tx.date === key).reduce((sum, tx) => sum + tx.amount, 0) });
     }
     return days;
-  }, [data.transactions, month]);
+  }, [data.transactions, month, trendWindow]);
+  const trendCanGoEarlier = dailyTrend[0]?.key !== dateKey(new Date(month.getFullYear(), month.getMonth(), 1));
+  const trendCanGoLater = trendWindow > 0;
+  const trendRange = dailyTrend.length ? `${dailyTrend[0].label}—${dailyTrend.at(-1)?.label}` : '';
 
   const visibleRecords = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return monthTransactions.filter((tx) => {
       const matchesType = recordFilter === 'all' || tx.type === recordFilter;
-      const matchesDate = recordDateFilter === 'all' || tx.date === relativeDate(0);
+      const matchesDate = recordDateFilter === 'all' || tx.date === recordDateFilter;
+      const matchesCategory = !recordCategoryFilter || (tx.category === recordCategoryFilter.name && tx.type === recordCategoryFilter.type);
       const matchesQuery = !normalized || tx.note.toLowerCase().includes(normalized) || tx.category.toLowerCase().includes(normalized);
-      return matchesType && matchesDate && matchesQuery;
+      return matchesType && matchesDate && matchesCategory && matchesQuery;
+    }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  }, [monthTransactions, query, recordCategoryFilter, recordDateFilter, recordFilter]);
+
+  const recordGroups = useMemo(() => {
+    const groups: Array<{ date: string; transactions: Transaction[] }> = [];
+    visibleRecords.forEach((transaction) => {
+      const current = groups.at(-1);
+      if (current?.date === transaction.date) current.transactions.push(transaction);
+      else groups.push({ date: transaction.date, transactions: [transaction] });
     });
-  }, [monthTransactions, query, recordDateFilter, recordFilter]);
+    return groups;
+  }, [visibleRecords]);
 
   const accent = data.theme === 'custom' ? data.customAccent : themeOptions.find((item) => item.id === data.theme)?.accent ?? themeOptions[0].accent;
   const themeStyle = {
@@ -389,22 +433,81 @@ export default function HomePage() {
     setOperator(null);
   }
 
-  function openAllRecords() {
-    setRecordDateFilter('all');
-    setTab('records');
+  function changeMonth(nextMonth: Date) {
+    setMonth(nextMonth);
+    setTrendWindow(0);
   }
 
-  function openTodayRecords() {
-    const now = new Date();
-    setMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-    setRecordFilter('expense');
-    setRecordDateFilter('today');
+  function openAllRecords() {
+    clearRecordOrigin();
+    setRecordFilter('all');
+    setRecordDateFilter('all');
+    setRecordCategoryFilter(null);
     setQuery('');
     setTab('records');
   }
 
-  function pushLayer(layer: 'entry' | 'settings') {
+  function openTodayRecords() {
+    clearRecordOrigin();
+    const now = new Date();
+    changeMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+    setRecordFilter('expense');
+    setRecordDateFilter(relativeDate(0));
+    setRecordCategoryFilter(null);
+    setQuery('');
+    setTab('records');
+  }
+
+  function openCategoryRecords(name: string, type: TxType) {
+    recordsOriginScroll.current = pageScrollRef.current?.scrollTop ?? 0;
+    pushLayer('records-detail');
+    setRecordFilter(type);
+    setRecordDateFilter('all');
+    setRecordCategoryFilter({ name, type });
+    setRecordsOrigin('stats');
+    setQuery('');
+    setTab('records');
+    window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: 0 }));
+  }
+
+  function openDateRecords(date: string) {
+    recordsOriginScroll.current = pageScrollRef.current?.scrollTop ?? 0;
+    pushLayer('records-detail');
+    setMonth(new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, 1));
+    setRecordFilter('all');
+    setRecordDateFilter(date);
+    setRecordCategoryFilter(null);
+    setRecordsOrigin('stats');
+    setQuery('');
+    setTab('records');
+    window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: 0 }));
+  }
+
+  function pushLayer(layer: 'entry' | 'settings' | 'records-detail') {
     window.history.pushState({ ...window.history.state, ledgerLayer: layer }, '');
+  }
+
+  function clearRecordOrigin() {
+    if (window.history.state?.ledgerLayer === 'records-detail') {
+      const nextState = { ...window.history.state };
+      delete nextState.ledgerLayer;
+      window.history.replaceState(nextState, '');
+    }
+    setRecordsOrigin(null);
+  }
+
+  function switchTab(nextTab: Tab) {
+    clearRecordOrigin();
+    setTab(nextTab);
+  }
+
+  function dismissRecordDetail() {
+    if (window.history.state?.ledgerLayer === 'records-detail') window.history.back();
+    else if (recordsOrigin) {
+      setTab(recordsOrigin);
+      setRecordsOrigin(null);
+      window.requestAnimationFrame(() => pageScrollRef.current?.scrollTo({ top: recordsOriginScroll.current }));
+    }
   }
 
   function dismissEntry() {
@@ -495,7 +598,7 @@ export default function HomePage() {
     } else {
       const created: Transaction = { id: `tx-${Date.now()}`, type: draftType, amount: parsed, category, note: note.trim() || category, date: txDate, createdAt: Date.now() };
       setData((current) => ({ ...current, lastCategory: draftType === 'expense' ? category : current.lastCategory, transactions: [created, ...current.transactions] }));
-      setMonth(new Date(Number(txDate.slice(0, 4)), Number(txDate.slice(5, 7)) - 1, 1));
+      changeMonth(new Date(Number(txDate.slice(0, 4)), Number(txDate.slice(5, 7)) - 1, 1));
       setToast(`${draftType === 'expense' ? '支出' : '收入'}已记下`);
     }
     dismissEntry();
@@ -617,13 +720,15 @@ export default function HomePage() {
     reader.readAsDataURL(file);
   }
 
-  const renderTransaction = (transaction: Transaction) => {
+  const renderTransaction = (transaction: Transaction, emphasizeNote = false) => {
     const meta = categoryMeta(transaction.category, transaction.type, data.customCategories);
     const Icon = meta.icon;
+    const hasNote = Boolean(transaction.note.trim()) && transaction.note.trim() !== transaction.category;
+    const time = Number.isFinite(transaction.createdAt) ? new Date(transaction.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
     return (
       <button className="transaction" key={transaction.id} onClick={() => openEdit(transaction)}>
         <span className="category-icon" style={{ background: meta.soft, color: meta.color }}><Icon size={19} strokeWidth={2} /></span>
-        <span className="transaction-copy"><b>{transaction.note || transaction.category}</b><small>{transaction.category} · {friendlyDate(transaction.date)}</small></span>
+        <span className="transaction-copy"><b className={emphasizeNote && !hasNote ? 'empty-note' : ''}>{emphasizeNote ? (hasNote ? transaction.note : '未填写备注') : transaction.note || transaction.category}</b><small>{transaction.category} · {friendlyDate(transaction.date)}{emphasizeNote && time ? ` · ${time}` : ''}</small></span>
         <strong className={transaction.type === 'income' ? 'positive' : ''}>{transaction.type === 'income' ? '+' : '−'}{formatMoney(transaction.amount)}</strong>
       </button>
     );
@@ -642,14 +747,14 @@ export default function HomePage() {
   return (
     <main className="app-shell">
       <section className="phone-surface" style={themeStyle}>
-        <div className="page-scroll">
+        <div className="page-scroll" ref={pageScrollRef}>
           {tab === 'home' && (
             <div className="page page-home">
               <header className="brand-topbar">
                 <div className="brand-lockup"><span className="brand-mark"><img src="/app-icon.png" alt="" /></span><div><b>拾账</b><span>把每一笔，拾进账本</span></div></div>
-                <button className="avatar" onClick={() => setTab('profile')} aria-label="打开个人设置">{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</button>
+                <button className="avatar" onClick={() => switchTab('profile')} aria-label="打开个人设置">{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</button>
               </header>
-              <div className="home-period"><div><p className="eyebrow">LEDGER</p><h1>{month.getMonth() + 1} 月账本</h1></div><MonthControl value={month} onChange={setMonth} /></div>
+              <div className="home-period"><div><p className="eyebrow">LEDGER</p><h1>{month.getMonth() + 1} 月账本</h1></div><MonthControl value={month} onChange={changeMonth} /></div>
               <button className="today-card" onClick={() => todayExpenses.length ? openTodayRecords() : openNew()} aria-label={todayExpenses.length ? `今日花费 ${formatMoney(todaySpent)}，查看今日明细` : '今日还没有支出，记下第一笔'}>
                 <span className="today-heading"><span><small>TODAY</small><b>今日花费</b></span><CalendarDays size={21} /></span>
                 <strong>{formatMoney(todaySpent)}</strong>
@@ -665,30 +770,30 @@ export default function HomePage() {
               </button>
               <section className="recent-section">
                 <div className="section-heading"><div><p className="eyebrow">RECENT</p><h2>最近记录</h2></div>{monthTransactions.length > 0 && <button onClick={openAllRecords}>全部记录</button>}</div>
-                <div className="transaction-list home-list">{monthTransactions.length ? monthTransactions.slice(0, 6).map(renderTransaction) : emptyState('账本还是空的', true)}</div>
+                <div className="transaction-list home-list">{monthTransactions.length ? monthTransactions.slice(0, 6).map((transaction) => renderTransaction(transaction)) : emptyState('账本还是空的', true)}</div>
               </section>
             </div>
           )}
 
           {tab === 'stats' && (
             <div className="page">
-              <header className="page-header"><div><p className="eyebrow">INSIGHTS</p><h1>收支统计</h1></div><MonthControl value={month} onChange={setMonth} /></header>
+              <header className="page-header"><div><p className="eyebrow">INSIGHTS</p><h1>收支统计</h1></div><MonthControl value={month} onChange={changeMonth} /></header>
               <section className="stats-summary"><div><span>支出</span><strong>{formatMoney(totals.expense)}</strong></div><div><span>收入</span><strong>{formatMoney(totals.income)}</strong></div><div><span>结余</span><strong>{formatMoney(totals.income - totals.expense)}</strong></div></section>
               <section className="panel analysis-panel">
                 <div className="panel-title"><div><p className="eyebrow">BREAKDOWN</p><h2>支出去向</h2></div><span>{monthTransactions.filter((tx) => tx.type === 'expense').length} 笔</span></div>
-                {totals.expense ? <><div className="donut-layout"><div className="donut" style={{ background: donutGradient }}><div><span>总支出</span><b>{formatMoney(totals.expense, 0)}</b></div></div><div className="top-category"><span>最高支出</span><b>{categoryTotals[0]?.name}</b><strong>{categoryTotals[0] ? Math.round(categoryTotals[0].amount / totals.expense * 100) : 0}%</strong></div></div><div className="category-breakdown">{categoryTotals.map((item) => <div key={item.name}><i style={{ background: item.color }} /><span>{item.name}</span><div className="mini-track"><i style={{ width: `${item.amount / totals.expense * 100}%`, background: item.color }} /></div><b>{formatMoney(item.amount, 0)}</b></div>)}</div></> : emptyState('本月还没有支出')}
+                {totals.expense ? <><div className="donut-layout"><div className="donut" style={{ background: donutGradient }}><div><span>总支出</span><b>{formatMoney(totals.expense, 0)}</b></div></div><div className="top-category"><span>最高支出</span><b>{categoryTotals[0]?.name}</b><strong>{categoryTotals[0] ? Math.round(categoryTotals[0].amount / totals.expense * 100) : 0}%</strong></div></div><div className="category-breakdown">{categoryTotals.map((item) => <button key={item.name} onClick={() => openCategoryRecords(item.name, 'expense')} aria-label={`查看${item.name}明细`}><i style={{ background: item.color }} /><span>{item.name}</span><div className="mini-track"><i style={{ width: `${item.amount / totals.expense * 100}%`, background: item.color }} /></div><b>{formatMoney(item.amount, 0)}</b><ChevronRight size={14} /></button>)}</div></> : emptyState('本月还没有支出')}
               </section>
-              <section className="panel trend-panel"><div className="panel-title"><div><p className="eyebrow">7 DAYS</p><h2>每日趋势</h2></div></div><div className="bar-chart">{dailyTrend.map((day) => { const max = Math.max(...dailyTrend.map((item) => item.amount), 1); return <div className="bar-column" key={day.key}><span>{day.amount ? formatMoney(day.amount, 0) : ''}</span><i style={{ height: `${Math.max(day.amount ? 12 : 3, day.amount / max * 92)}px` }} /><small>{day.label}</small></div>; })}</div></section>
+              <section className="panel trend-panel"><div className="panel-title"><div><p className="eyebrow">7 DAYS</p><h2>每日趋势</h2></div><div className="trend-navigation"><button disabled={!trendCanGoEarlier} onClick={() => setTrendWindow((current) => current + 1)} aria-label="查看更早七天"><ChevronLeft size={15} /></button><span>{trendRange}</span><button disabled={!trendCanGoLater} onClick={() => setTrendWindow((current) => Math.max(0, current - 1))} aria-label="查看较新七天"><ChevronRight size={15} /></button></div></div><div className="bar-chart">{dailyTrend.map((day) => { const max = Math.max(...dailyTrend.map((item) => item.amount), 1); return <button className="bar-column" key={day.key} onClick={() => openDateRecords(day.key)} aria-label={`查看${day.label}明细`}><span>{day.amount ? formatMoney(day.amount, 0) : ''}</span><i style={{ height: `${Math.max(day.amount ? 12 : 3, day.amount / max * 92)}px` }} /><small>{day.label}</small></button>; })}</div></section>
             </div>
           )}
 
           {tab === 'records' && (
             <div className="page">
-              <header className="page-header"><div><p className="eyebrow">LEDGER</p><h1>{recordDateFilter === 'today' ? '今日明细' : '全部明细'}</h1></div><MonthControl value={month} onChange={(next) => { setMonth(next); setRecordDateFilter('all'); }} /></header>
+              <header className="page-header"><div className="records-heading">{recordsOrigin && <button className="detail-back" onClick={dismissRecordDetail} aria-label="返回统计"><ChevronLeft size={19} /></button>}<div><p className="eyebrow">LEDGER</p><h1>{recordCategoryFilter ? `${recordCategoryFilter.name}明细` : recordDateFilter !== 'all' ? `${friendlyDate(recordDateFilter)}明细` : '全部明细'}</h1></div></div><MonthControl value={month} onChange={(next) => { changeMonth(next); setRecordDateFilter('all'); }} /></header>
               <label className="search-box"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索分类或备注" aria-label="搜索账单" />{query && <button onClick={() => setQuery('')} aria-label="清空搜索"><X size={16} /></button>}</label>
-              <div className="filter-row"><ListFilter size={17} />{recordDateFilter === 'today' && <button className="active" onClick={() => setRecordDateFilter('all')}>今日 ×</button>}{([['all', '全部'], ['expense', '支出'], ['income', '收入']] as const).map(([value, label]) => <button className={recordFilter === value ? 'active' : ''} key={value} onClick={() => setRecordFilter(value)}>{label}</button>)}<span>{visibleRecords.length} 笔</span></div>
+              <div className="filter-row"><ListFilter size={17} />{recordDateFilter !== 'all' && <button className="active" onClick={() => setRecordDateFilter('all')}>{friendlyDate(recordDateFilter)} ×</button>}{recordCategoryFilter && <button className="active" onClick={() => setRecordCategoryFilter(null)}>{recordCategoryFilter.name} ×</button>}{([['all', '全部'], ['expense', '支出'], ['income', '收入']] as const).map(([value, label]) => <button className={recordFilter === value ? 'active' : ''} key={value} onClick={() => setRecordFilter(value)}>{label}</button>)}<span>{visibleRecords.length} 笔</span></div>
               <div className="records-total"><span>筛选合计</span><b>支出 {formatMoney(visibleRecords.filter((tx) => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0))}</b></div>
-              <section className="transaction-list records-list">{visibleRecords.length ? visibleRecords.map(renderTransaction) : emptyState('没有匹配的记录')}</section>
+              {recordGroups.length ? <div className="record-groups">{recordGroups.map((group) => <section className="record-group" key={group.date}><div className="record-group-title"><b>{friendlyDate(group.date)}</b><span>{group.transactions.length} 笔</span></div><div className="transaction-list records-list">{group.transactions.map((transaction) => renderTransaction(transaction, true))}</div></section>)}</div> : <section className="transaction-list records-list">{emptyState('没有匹配的记录')}</section>}
             </div>
           )}
 
@@ -702,22 +807,18 @@ export default function HomePage() {
                 <button onClick={() => openSettings('categories')}><span className="menu-icon"><Tags /></span><span><b>分类管理</b><small>{enabledExpense.length + enabledIncome.length} 个分类已启用</small></span><ChevronRight /></button>
                 <button onClick={() => openSettings('theme')}><span className="menu-icon"><Palette /></span><span><b>主题与外观</b><small>{activeThemeName}</small></span><i className="theme-dot" style={{ background: accent }} /><ChevronRight /></button>
               </div></div>
-              <div className="settings-group"><p>数据与安全</p><div className="menu-list">
-                <button onClick={exportCsv}><span className="menu-icon"><Download /></span><span><b>导出账单</b><small>保存为 CSV 文件</small></span><ChevronRight /></button>
-                <button onClick={clearTransactions} className="danger-row"><span className="menu-icon"><Trash2 /></span><span><b>清空所有账目</b><small>保留你的昵称、主题和设置</small></span><ChevronRight /></button>
-              </div></div>
-              <div className="settings-group"><p>关于</p><div className="menu-list"><button onClick={() => openSettings('about')}><span className="menu-icon"><Info /></span><span><b>关于拾账</b><small>本机存储 · 简单安心</small></span><ChevronRight /></button></div></div>
+              <div className="settings-group"><p>其他</p><div className="menu-list"><button onClick={() => openSettings('settings')}><span className="menu-icon"><Settings2 /></span><span><b>设置</b><small>数据安全与账本信息</small></span><ChevronRight /></button><button onClick={() => openSettings('about')}><span className="menu-icon"><Info /></span><span><b>关于拾账</b><small>本机存储 · 简单安心</small></span><ChevronRight /></button></div></div>
               <p className="local-note"><ShieldCheck size={14} />数据只保存在你的设备中，不上传云端</p>
             </div>
           )}
         </div>
 
         <nav className="tabbar" aria-label="主要导航">
-          <button className={tab === 'home' ? 'active' : ''} onClick={() => setTab('home')}><Home /><span>首页</span></button>
-          <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}><BarChart3 /><span>统计</span></button>
+          <button className={tab === 'home' ? 'active' : ''} onClick={() => switchTab('home')}><Home /><span>首页</span></button>
+          <button className={tab === 'stats' ? 'active' : ''} onClick={() => switchTab('stats')}><BarChart3 /><span>统计</span></button>
           <button className="add-button" onClick={() => openNew()} aria-label="记一笔"><Plus /></button>
           <button className={tab === 'records' ? 'active' : ''} onClick={openAllRecords}><ReceiptText /><span>明细</span></button>
-          <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}><CircleUserRound /><span>我的</span></button>
+          <button className={tab === 'profile' ? 'active' : ''} onClick={() => switchTab('profile')}><CircleUserRound /><span>我的</span></button>
         </nav>
 
         {entryOpen && (
@@ -739,12 +840,13 @@ export default function HomePage() {
         {settingsPanel && (
           <div className="settings-layer" role="dialog" aria-modal="true" aria-label="拾账设置">
             <button className="settings-backdrop" onClick={dismissSettings} aria-label="关闭设置" />
-            <section className="settings-sheet"><div className="sheet-handle" /><header><div><p className="eyebrow">SETTINGS</p><h2>{settingsPanel === 'profile' ? '个人资料' : settingsPanel === 'theme' ? '主题与外观' : settingsPanel === 'budget' ? '预算设置' : settingsPanel === 'categories' ? '分类管理' : '关于拾账'}</h2></div><button onClick={dismissSettings} aria-label="关闭"><X size={20} /></button></header>
+            <section className="settings-sheet"><div className="sheet-handle" /><header><div><p className="eyebrow">SETTINGS</p><h2>{settingsPanel === 'profile' ? '个人资料' : settingsPanel === 'theme' ? '主题与外观' : settingsPanel === 'budget' ? '预算设置' : settingsPanel === 'categories' ? '分类管理' : settingsPanel === 'settings' ? '设置' : '关于拾账'}</h2></div><button onClick={dismissSettings} aria-label="关闭"><X size={20} /></button></header>
               {settingsPanel === 'profile' && <div className="sheet-content"><div className="avatar-picker"><span>{data.avatarImage ? <img src={data.avatarImage} alt="我的头像" /> : data.avatar || '我'}</span><div className="avatar-options"><label className="avatar-upload"><ImagePlus size={17} /><b>{data.avatarImage ? '更换照片' : '上传照片'}</b><input type="file" accept="image/*" onChange={handleAvatarUpload} /></label></div></div><label className="form-field"><span><UserRound size={17} />账本昵称</span><input maxLength={12} value={data.owner} onChange={(event) => setData((current) => ({ ...current, owner: event.target.value }))} placeholder="输入你的昵称" /></label><label className="form-field"><span><Pencil size={17} />简约文字头像</span><input maxLength={2} value={data.avatar} onChange={(event) => setData((current) => ({ ...current, avatar: event.target.value, avatarImage: '' }))} placeholder="1—2 个字或符号" /></label></div>}
               {settingsPanel === 'theme' && <div className="sheet-content"><p className="sheet-tip">选择一种喜欢的主色，界面会立即更新。</p><div className="theme-list">{themeOptions.map((item) => <button className={data.theme === item.id ? 'active' : ''} key={item.id} onClick={() => setData((current) => ({ ...current, theme: item.id }))}><i style={{ background: item.accent }} /><span>{item.name}</span>{data.theme === item.id && <Check size={18} />}</button>)}<label className={data.theme === 'custom' ? 'active custom-color' : 'custom-color'} onClick={() => setData((current) => ({ ...current, theme: 'custom' }))}><i style={{ background: data.customAccent }}><Palette size={15} /></i><span>自定义颜色</span>{data.theme === 'custom' && <Check size={18} />}<input type="color" value={data.customAccent} onChange={(event) => setData((current) => ({ ...current, theme: 'custom', customAccent: event.target.value }))} /></label></div></div>}
               {settingsPanel === 'budget' && <div className="sheet-content"><p className="sheet-tip">预算从 0 开始，你可以随时修改；设为 0 即关闭提醒。</p><label className="budget-editor"><span>¥</span><input autoFocus inputMode="decimal" value={data.budget || ''} onChange={(event) => setData((current) => ({ ...current, budget: Math.max(0, Number(event.target.value)) }))} placeholder="0" /></label><div className="budget-presets">{[1000, 3000, 5000, 8000].map((value) => <button key={value} onClick={() => setData((current) => ({ ...current, budget: value }))}>{formatMoney(value, 0)}</button>)}</div></div>}
               {settingsPanel === 'categories' && <div className="sheet-content category-settings"><p className="sheet-tip">关闭不常用的分类，记账页会更精简。你也可以添加自己的支出或收入分类，已有账目不会受影响。</p>{([['expense', '支出分类', expenseCategoryOptions], ['income', '收入分类', incomeCategoryOptions]] as const).map(([type, label, items]) => <div className="category-setting-group" key={type}><h3>{label}</h3><div className="category-setting-list">{items.map((item) => { const Icon = item.icon; const enabled = !data.hiddenCategories.includes(`${type}:${item.name}`); return <div className={`category-setting-item ${enabled ? 'enabled' : ''}`} key={`${type}:${item.name}`}><button className="category-toggle" onClick={() => toggleCategory(type, item.name)}><span style={{ background: item.soft, color: item.color }}><Icon size={18} /></span><b>{item.name}</b><i>{enabled ? '显示' : '隐藏'}</i></button>{item.customId && <button className="category-remove" onClick={() => deleteCustomCategory(item, type)} aria-label={`删除${item.name}`}><Trash2 size={14} /></button>}</div>; })}</div><form className="category-add" onSubmit={(event) => addCustomCategory(event, type)}><input maxLength={8} value={newCategoryNames[type]} onChange={(event) => setNewCategoryNames((current) => ({ ...current, [type]: event.target.value }))} placeholder={type === 'expense' ? '例如：宠物、订阅' : '例如：副业、利息'} /><button type="submit"><Plus size={16} />添加</button></form></div>)}</div>}
-              {settingsPanel === 'about' && <div className="sheet-content about-card"><img src="/app-icon.png" alt="拾账图标" /><h3>拾账</h3><p>把每一笔，拾进自己的账本。没有示例账目，没有复杂流程，你的账本由你自己开始。</p><span><ShieldCheck size={17} />所有数据仅存于本机</span><small>版本 1.1</small></div>}
+              {settingsPanel === 'settings' && <div className="sheet-content"><p className="sheet-tip">账目数据只保存在当前设备。建议定期导出账单；清空后无法撤销。</p><div className="settings-group"><p>数据与安全</p><div className="menu-list"><button onClick={exportCsv}><span className="menu-icon"><Download /></span><span><b>导出账单</b><small>保存为 CSV 文件</small></span><ChevronRight /></button><button onClick={clearTransactions} className="danger-row"><span className="menu-icon"><Trash2 /></span><span><b>清空所有账目</b><small>保留你的昵称、主题和设置</small></span><ChevronRight /></button></div></div><p className="local-note"><ShieldCheck size={14} />数据只保存在你的设备中，不上传云端</p></div>}
+              {settingsPanel === 'about' && <div className="sheet-content about-card"><img src="/app-icon.png" alt="拾账图标" /><h3>拾账</h3><p>把每一笔，拾进自己的账本。没有示例账目，没有复杂流程，你的账本由你自己开始。</p><span><ShieldCheck size={17} />所有数据仅存于本机</span><small>版本 1.2</small></div>}
             </section>
           </div>
         )}
